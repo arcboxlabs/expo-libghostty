@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  # npm trusted publishing (OIDC) — no NPM_TOKEN secret.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing requires npm >= 11.5.1.
+      - run: npm install -g npm@latest
+
+      - name: Check tag matches package version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "package.json version v$version does not match tag $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm clean && pnpm build
+
+      # Auth comes from the trusted publisher configured on npmjs.com
+      # (GitHub Actions / arcboxlabs/expo-libghostty / release.yml).
+      - run: npm publish
