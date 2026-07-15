@@ -16,3 +16,13 @@ __tests__
 
 # Fetched at install time by scripts/download-xcframework.mjs
 /ios/vendor/Frameworks/
+
+# Repo tooling, useless to consumers
+/.envrc
+/.prettierrc
+/devenv.nix
+/devenv.yaml
+/devenv.lock
+/eslint.config.cjs
+/pnpm-workspace.yaml
+/tsconfig.json
