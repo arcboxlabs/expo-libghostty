@@ -66,3 +66,6 @@ devenv.local.yaml
 
 # pre-commit
 .pre-commit-config.yaml
+
+# Fetched at install time by scripts/download-xcframework.mjs
+/ios/vendor/Frameworks/
