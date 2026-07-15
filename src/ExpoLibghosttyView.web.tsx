@@ -1,6 +1,6 @@
-import { ExpoLibghosttyViewProps } from './ExpoLibghostty.types';
+import type { TerminalViewProps } from './ExpoLibghostty.types';
 
-// ExpoLibghosttyView is not available on the web platform.
-export default function ExpoLibghosttyView(_props: ExpoLibghosttyViewProps) {
-  throw new Error('ExpoLibghosttyView is not available on the web platform.');
+// TerminalView is not available on the web platform.
+export default function TerminalView(_props: TerminalViewProps) {
+  throw new Error('TerminalView is not available on the web platform.');
 }

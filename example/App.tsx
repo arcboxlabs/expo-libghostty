@@ -1,32 +1,33 @@
-import { ExpoLibghosttyView } from 'expo-libghostty';
-import { Button, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { TerminalView, TerminalViewRef } from 'expo-libghostty';
+import { useEffect, useRef } from 'react';
+import { View } from 'react-native';
 
+// "\x1B[1;32mexpo-libghostty\x1B[0m — local echo demo\r\n
+//  No PTY attached; typed bytes are echoed back.\r\n\r\n$ "
+const BANNER =
+  'G1sxOzMybWV4cG8tbGliZ2hvc3R0eRtbMG0g4oCUIGxvY2FsIGVjaG8gZGVtbw0KTm8gUFRZIGF0dGFjaGVkOyB0eXBlZCBieXRlcyBhcmUgZWNob2VkIGJhY2suDQoNCiQg';
+
+// Local loopback: user input is echoed straight back into the grid,
+// standing in for a real PTY behind the LinkCode wire.
 export default function App() {
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.container}>
-        <Text style={styles.header}>Module API Example</Text>
-        <Group name="Views">
-          <ExpoLibghosttyView onTap={() => console.log('Tapped!')} style={styles.view} />
-        </Group>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
+  const terminal = useRef<TerminalViewRef>(null);
 
-function Group(props: { name: string; children: React.ReactNode }) {
+  useEffect(() => {
+    terminal.current?.write(BANNER);
+  }, []);
+
   return (
-    <View style={styles.group}>
-      <Text style={styles.groupHeader}>{props.name}</Text>
-      {props.children}
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <TerminalView
+        ref={terminal}
+        style={{ flex: 1 }}
+        onInput={({ nativeEvent }) => {
+          terminal.current?.write(nativeEvent.data);
+        }}
+        onResize={({ nativeEvent }) => {
+          console.log(`resize: ${nativeEvent.cols}x${nativeEvent.rows}`);
+        }}
+      />
     </View>
   );
 }
-
-const styles = {
-  header: { fontSize: 30, margin: 20 },
-  groupHeader: { fontSize: 20, marginBottom: 20 },
-  group: { margin: 20, backgroundColor: '#fff', borderRadius: 10, padding: 20 },
-  container: { flex: 1, backgroundColor: '#eee' },
-  view: { flex: 1, height: 200 },
-};
