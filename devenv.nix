@@ -53,6 +53,5 @@
     };
   };
 
-  # The example app is metro-linked (extraNodeModules), not a pnpm workspace member.
   scripts.example.exec = "pnpm --dir example ios";
 }
