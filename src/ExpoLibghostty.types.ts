@@ -4,6 +4,8 @@ import type { StyleProp, ViewStyle } from 'react-native';
 export type TerminalInputEvent = {
   /** Base64-encoded bytes typed by the user; forward to the PTY. */
   data: string;
+  /** The same bytes decoded as UTF-8, for string-based wires. */
+  text: string;
 };
 
 export type TerminalResizeEvent = {
@@ -15,6 +17,8 @@ export type TerminalResizeEvent = {
 export type TerminalViewRef = {
   /** Feed base64-encoded PTY output into the terminal grid. */
   write(base64: string): Promise<void>;
+  /** Feed PTY output as UTF-8 text, for string-based wires. */
+  writeText(text: string): Promise<void>;
   /** Mark the underlying PTY as exited. */
   finish(exitCode: number): Promise<void>;
 };

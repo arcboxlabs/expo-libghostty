@@ -17,7 +17,10 @@ class ExpoLibghosttyView: ExpoView {
 
     let session = InMemoryTerminalSession(
       write: { [weak self] data in
-        self?.onInput(["data": data.base64EncodedString()])
+        self?.onInput([
+          "data": data.base64EncodedString(),
+          "text": String(decoding: data, as: UTF8.self),
+        ])
       },
       resize: { [weak self] viewport in
         self?.onResize(["cols": viewport.columns, "rows": viewport.rows])
@@ -35,6 +38,11 @@ class ExpoLibghosttyView: ExpoView {
   /// Feed PTY output (terminal.output on the wire) into the grid.
   func write(_ data: Data) {
     session?.receive(data)
+  }
+
+  /// Feed PTY output as UTF-8 text, for string-based wires.
+  func write(_ text: String) {
+    session?.receive(text)
   }
 
   /// Mark the underlying PTY as exited (terminal.exit on the wire).

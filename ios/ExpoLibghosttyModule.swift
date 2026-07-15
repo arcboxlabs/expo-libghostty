@@ -15,6 +15,11 @@ public class ExpoLibghosttyModule: Module {
         view.write(data)
       }.runOnQueue(.main)
 
+      // PTY output as UTF-8 text → terminal grid.
+      AsyncFunction("writeText") { (view: ExpoLibghosttyView, text: String) in
+        view.write(text)
+      }.runOnQueue(.main)
+
       // PTY exited.
       AsyncFunction("finish") { (view: ExpoLibghosttyView, exitCode: UInt32) in
         view.finish(exitCode: exitCode)
