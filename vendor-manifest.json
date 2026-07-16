@@ -10,5 +10,13 @@
   "MSDisplayLink": {
     "repo": "https://github.com/Lakr233/MSDisplayLink.git",
     "tag": "2.1.0"
+  },
+  "libghostty-vt": {
+    "repo": "https://github.com/ghostty-org/ghostty.git",
+    "commit": "b0947378349eff70f7030dda0e6d022fae1e6fbd",
+    "android": {
+      "url": "https://github.com/arcboxlabs/expo-libghostty/releases/download/storage.libghostty-vt.b0947378349e/libghostty-vt-android-b0947378349e.tar.gz",
+      "sha256": "4e97e33b7685e477aa0078992e01262ceb51688914370604d12390069c1603a1"
+    }
   }
 }
