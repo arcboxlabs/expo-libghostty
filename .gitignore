@@ -69,3 +69,6 @@ devenv.local.yaml
 
 # Fetched at install time by scripts/download-xcframework.mjs
 /ios/vendor/Frameworks/
+
+# Fetched at install time by scripts/download-android-libs.mjs
+/android/vendor/

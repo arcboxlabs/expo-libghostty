@@ -1,6 +1,9 @@
 {
-  "platforms": ["apple"],
+  "platforms": ["apple", "android"],
   "apple": {
     "modules": ["ExpoLibghosttyModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.libghostty.ExpoLibghosttyModule"]
   }
 }

@@ -10,7 +10,7 @@
     "lint": "eslint src/",
     "test": "node internal/module_scripts/test.js",
     "prepare": "node internal/module_scripts/prepare.js",
-    "postinstall": "node scripts/download-xcframework.mjs",
+    "postinstall": "node scripts/download-xcframework.mjs && node scripts/download-android-libs.mjs",
     "sync-vendor": "./scripts/sync-vendor.sh",
     "open:ios": "node internal/module_scripts/open-ios.js",
     "open:android": "node internal/module_scripts/open-android.js"
