@@ -1,0 +1,93 @@
+name: Build Android libghostty-vt
+
+# Cross-compiles libghostty-vt.a for Android (arm64-v8a + x86_64) from a
+# pinned ghostty commit and uploads the tarball to a storage release.
+# After a successful run, pin the printed sha256 + URL in
+# vendor-manifest.json under libghostty-vt.android.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ghostty_commit:
+        description: ghostty commit to build (C ABI is not yet stable — always pin)
+        required: true
+        default: b0947378349eff70f7030dda0e6d022fae1e6fbd
+
+permissions:
+  contents: write
+
+env:
+  # ghostty's requireZig hard-pins the minor version.
+  ZIG_VERSION: 0.15.2
+  NDK_VERSION: 27.1.12297006
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ghostty-org/ghostty
+          ref: ${{ inputs.ghostty_commit }}
+          path: ghostty
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Install NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      # -Dsimd=false drops the simdutf/highway C++ SIMD paths; lib-vt then
+      # only needs uucode + compiler_rt (matches the locally verified build).
+      - name: Build arm64-v8a
+        working-directory: ghostty
+        run: |
+          zig build -Demit-lib-vt -Dtarget=aarch64-linux-android -Dsimd=false \
+            -Doptimize=ReleaseFast --prefix out-arm64-v8a
+
+      - name: Build x86_64
+        working-directory: ghostty
+        run: |
+          zig build -Demit-lib-vt -Dtarget=x86_64-linux-android -Dsimd=false \
+            -Doptimize=ReleaseFast --prefix out-x86_64
+
+      - name: Assemble tarball
+        id: pack
+        working-directory: ghostty
+        run: |
+          short=$(git rev-parse --short=12 HEAD)
+          stage=$(mktemp -d)
+          mkdir -p "$stage/arm64-v8a" "$stage/x86_64"
+          cp out-arm64-v8a/lib/libghostty-vt.a "$stage/arm64-v8a/"
+          cp out-x86_64/lib/libghostty-vt.a "$stage/x86_64/"
+          cp -R out-arm64-v8a/include "$stage/include"
+          tarball="libghostty-vt-android-$short.tar.gz"
+          tar -czf "$tarball" -C "$stage" arm64-v8a x86_64 include
+          echo "tag=storage.libghostty-vt.$short" >> "$GITHUB_OUTPUT"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          shasum -a 256 "$tarball"
+
+      - name: Upload to storage release
+        working-directory: ghostty
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.pack.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "libghostty-vt android (${{ inputs.ghostty_commit }})" \
+            --notes "libghostty-vt.a for arm64-v8a + x86_64, ghostty commit ${{ steps.pack.outputs.commit }}, Zig $ZIG_VERSION, NDK $NDK_VERSION, -Dsimd=false" \
+            "${{ steps.pack.outputs.tarball }}" || \
+          gh release upload "${{ steps.pack.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" --clobber \
+            "${{ steps.pack.outputs.tarball }}"
+
+      - name: Print manifest pin
+        working-directory: ghostty
+        run: |
+          echo "vendor-manifest.json pin:"
+          echo "  url: https://github.com/$GITHUB_REPOSITORY/releases/download/${{ steps.pack.outputs.tag }}/${{ steps.pack.outputs.tarball }}"
+          echo "  sha256: $(shasum -a 256 ${{ steps.pack.outputs.tarball }} | cut -d' ' -f1)"
