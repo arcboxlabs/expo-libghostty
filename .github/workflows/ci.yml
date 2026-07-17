@@ -43,7 +43,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       # postinstall fetches the pinned libghostty-vt vendor tarball the
       # CMake build links against.
