@@ -76,9 +76,12 @@ jobs:
           cp -R out-arm64-v8a/include "$stage/include"
           cp ../nerd-symbols/SymbolsNerdFontMono-Regular.ttf "$stage/fonts/"
           cp ../nerd-symbols/LICENSE "$stage/fonts/NERD-FONTS-LICENSE"
-          tarball="libghostty-vt-android-$short.tar.gz"
+          # Run number in the tag/asset keeps every published tarball
+          # immutable — re-runs never clobber a sha256 already pinned in
+          # vendor-manifest.json.
+          tarball="libghostty-vt-android-$short-r$GITHUB_RUN_NUMBER.tar.gz"
           tar -czf "$tarball" -C "$stage" arm64-v8a x86_64 include fonts
-          echo "tag=storage.libghostty-vt.$short" >> "$GITHUB_OUTPUT"
+          echo "tag=storage.libghostty-vt.$short.r$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           shasum -a 256 "$tarball"
