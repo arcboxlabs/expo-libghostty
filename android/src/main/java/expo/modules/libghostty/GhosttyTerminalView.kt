@@ -91,6 +91,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   private var cellFlags = IntArray(0)
   private var rowSelStart = IntArray(0)
   private var rowSelEnd = IntArray(0)
+  private var rowSelEndWide = BooleanArray(0)
 
   // ── Selection state ──
   private var selectionMode = false
@@ -98,10 +99,17 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   private var draggingHandle = HANDLE_NONE
   private var dragAnchorCol = 0
   private var dragAnchorRow = 0
+  private var dragBiasRows = 0
   private var lastPressCol = 0
   private var lastPressRow = 0
   private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
   private val handleRadius = HANDLE_RADIUS_DP * resources.displayMetrics.density
+  private val magnifier =
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+      android.widget.Magnifier(this)
+    } else {
+      null
+    }
 
   private var defaultBg = 0xFF000000.toInt()
   private var defaultFg = 0xFFFFFFFF.toInt()
@@ -191,8 +199,16 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         selectionMode = GhosttyVt.nativeSelectWord(handle, lastPressCol, lastPressRow)
         scheduleFrame()
-        // Even without a word under the finger, offer Paste / Select all.
-        startTerminalActionMode()
+        if (selectionMode) {
+          // Keep dragging without lifting: extend from the pressed cell.
+          draggingHandle = HANDLE_END
+          dragAnchorCol = lastPressCol
+          dragAnchorRow = lastPressRow
+          dragBiasRows = 0
+        } else {
+          // Even without a word under the finger, offer Paste / Select all.
+          startTerminalActionMode()
+        }
       }
 
       override fun onScroll(
@@ -376,6 +392,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     cellFlags = IntArray(cols)
     rowSelStart = IntArray(rows) { -1 }
     rowSelEnd = IntArray(rows) { -1 }
+    rowSelEndWide = BooleanArray(rows)
   }
 
   // ── Rendering ──
@@ -435,6 +452,10 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     if (top < 0) return null
     return intArrayOf(top, rowSelStart[top], bottom, rowSelEnd[bottom])
   }
+
+  /** Extra columns the end handle shifts right when the last cell is wide. */
+  private fun selEndExtraCols(row: Int): Int =
+    if (row < rowSelEndWide.size && rowSelEndWide[row]) 1 else 0
 
   private fun syncSelectionUi() {
     if (!selectionMode) return
@@ -550,7 +571,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
       Rect(
         if (singleRow) (topCol * cellWidth).toInt() else 0,
         top * cellHeight,
-        if (singleRow) ((bottomCol + 1) * cellWidth).toInt() else width,
+        if (singleRow) ((bottomCol + 1 + selEndExtraCols(bottom)) * cellWidth).toInt() else width,
         (bottom + 1) * cellHeight
       )
     } else {
@@ -570,7 +591,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     val slop = HANDLE_HIT_SLOP_DP * resources.displayMetrics.density
     val startX = topCol * cellWidth
     val startY = (top + 1) * cellHeight + handleRadius
-    val endX = (bottomCol + 1) * cellWidth
+    val endX = (bottomCol + 1 + selEndExtraCols(bottom)) * cellWidth
     val endY = (bottom + 1) * cellHeight + handleRadius
     val distStart = hypot(x - startX, y - startY)
     val distEnd = hypot(x - endX, y - endY)
@@ -578,11 +599,13 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
       distEnd <= slop && distEnd <= distStart -> {
         dragAnchorCol = topCol
         dragAnchorRow = top
+        dragBiasRows = 1
         HANDLE_END
       }
       distStart <= slop -> {
         dragAnchorCol = bottomCol
         dragAnchorRow = bottom
+        dragBiasRows = 1
         HANDLE_START
       }
       else -> HANDLE_NONE
@@ -592,9 +615,9 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   private fun dragSelection(x: Float, y: Float) {
     if (handle == 0L) return
     val col = (x / cellWidth).toInt().coerceIn(0, cols - 1)
-    // The handle hangs below its cell; aim one row above the finger.
-    val row = ((y / cellHeight).toInt() - 1).coerceIn(0, rows - 1)
+    val row = ((y / cellHeight).toInt() - dragBiasRows).coerceIn(0, rows - 1)
     GhosttyVt.nativeSetSelection(handle, dragAnchorCol, dragAnchorRow, col, row)
+    magnifier?.show(x, y)
     scheduleFrame()
   }
 
@@ -608,7 +631,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     val startTop = ((top + 1) * cellHeight).toFloat()
     canvas.drawRect(startX - stem / 2, startTop - cellHeight / 3f, startX + stem / 2, startTop + handleRadius, handlePaint)
     canvas.drawCircle(startX, startTop + handleRadius, handleRadius, handlePaint)
-    val endX = (bottomCol + 1) * cellWidth
+    val endX = (bottomCol + 1 + selEndExtraCols(bottom)) * cellWidth
     val endTop = ((bottom + 1) * cellHeight).toFloat()
     canvas.drawRect(endX - stem / 2, endTop - cellHeight / 3f, endX + stem / 2, endTop + handleRadius, handlePaint)
     canvas.drawCircle(endX, endTop + handleRadius, handleRadius, handlePaint)
@@ -673,6 +696,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     if (rowIndex < rowSelStart.size) {
       rowSelStart[rowIndex] = selStart
       rowSelEnd[rowIndex] = selEnd
+      rowSelEndWide[rowIndex] = false
     }
     val cellsPos = buf.position()
     val textPos = cellsPos + snapCols * CELL_RECORD_BYTES
@@ -692,6 +716,9 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
       val flags = buf.short.toInt() and 0xFFFF
       buf.short // pad
       if (col >= colCount) continue
+      if (col == selEnd && flags and FLAG_WIDE != 0 && rowIndex < rowSelEndWide.size) {
+        rowSelEndWide[rowIndex] = true
+      }
       val selected = selStart >= 0 && col >= selStart && col <= selEnd
       val swap = (flags and FLAG_INVERSE != 0) != selected
       var effFg = if (flags and FLAG_FG_DEFAULT != 0) defaultFg else fg
@@ -864,6 +891,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
         MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
           if (draggingHandle != HANDLE_NONE) {
             draggingHandle = HANDLE_NONE
+            magnifier?.dismiss()
             startTerminalActionMode()
             return true
           }
