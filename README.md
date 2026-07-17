@@ -15,8 +15,10 @@ Canvas renderer.
 - iOS: GPU (Metal) rendering, CJK IME, keyboard accessory bar with sticky
   modifiers, touch selection, pinch-to-zoom font size
 - Android: libghostty-vt state machine + JNI, dirty-row Canvas rendering
-  (system font fallback covers CJK/emoji), IME text input, hardware keys via
-  ghostty's key encoder, scrollback gestures, touch selection and clipboard
+  (system font fallback covers CJK/emoji; bundled Symbols Nerd Font covers
+  private-use glyphs), IME text input, hardware keys via ghostty's key
+  encoder, keyboard accessory bar with sticky modifiers, touch selection
+  with clipboard, inertial scrollback with indicator, cursor blink
 - Bring-your-own PTY: the view only renders bytes and reports input/resizes —
   transport and session lifecycle stay on your side
 
@@ -80,6 +82,24 @@ export function Terminal({ pty }) {
 | `write(base64)`    | Feed base64-encoded PTY output into the terminal grid. |
 | `writeText(text)`  | Feed PTY output as UTF-8 text, for string-based wires. |
 | `finish(exitCode)` | Mark the underlying PTY as exited.                     |
+
+### Platform parity
+
+The JS contract is identical on both platforms; native behavior differs
+where the platforms do:
+
+| Behavior                          | iOS (GhosttyKit)         | Android (libghostty-vt + Canvas)              |
+| --------------------------------- | ------------------------ | --------------------------------------------- |
+| Rendering                         | Metal                    | Canvas/Skia, dirty-row bitmap patching         |
+| CJK / emoji                       | bundled font stack       | system font fallback (Minikin)                 |
+| Nerd Font private-use glyphs      | bundled font stack       | bundled Symbols Nerd Font Mono                 |
+| IME text input                    | ✅                        | ✅ (commitText; sticky Ctrl/Alt compose chords) |
+| Keyboard accessory bar            | ✅ sticky modifiers       | ✅ Esc/Ctrl/Alt/Tab/arrows/nav, sticky Ctrl/Alt |
+| Hardware keys (DECCKM/kitty)      | ✅                        | ✅ via `ghostty_key_encoder`                    |
+| Touch selection + clipboard       | ✅                        | ✅ long-press word, drag handles, magnifier, floating Copy/Paste/Select all; bracketed paste with unsafe-paste confirm |
+| Scrollback                        | ✅                        | ✅ inertial fling, fading indicator, jump-to-bottom chip |
+| Cursor blink (DECSCUSR)           | ✅                        | ✅ (holds solid on I/O, honors animations-off)  |
+| Pinch-to-zoom font size           | ✅                        | ❌ (fixed 14 dp for now)                        |
 
 ## Vendoring
 

@@ -6,10 +6,23 @@
 
 ### 🎉 New features
 
+- Android: keyboard accessory bar (Esc / Ctrl / Alt / Tab / arrows / nav)
+  above the soft keyboard. Ctrl and Alt are sticky and compose the next key
+  — from the bar, the IME, or a hardware keyboard — through ghostty's
+  encoder. The view now pads itself above the IME in edge-to-edge windows,
+  so the covered grid rows come back too.
+- Android: inertial scrollback (fling), a fading scroll-position indicator,
+  and a jump-to-bottom chip; typed input snaps back to the live view.
+- Android: selection polish — long-press keeps extending the selection
+  without lifting, drags show the system magnifier (API 28+), and the end
+  handle accounts for wide (CJK) final cells.
+
 ### 🐛 Bug fixes
 
 ### 💡 Others
 
+- CI now compiles the Android module (and lints/builds the JS) on every
+  push and pull request.
 - Cleaned up `create-expo-module` scaffold leftovers: LICENSE attribution is
   now ArcBox, Inc., the podspec version is read from `package.json`, the
   unused jest and webpack scaffolding is gone, and the example app has
