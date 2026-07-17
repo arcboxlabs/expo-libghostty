@@ -301,6 +301,37 @@ Java_expo_modules_libghostty_GhosttyVt_nativeScroll(
   ghostty_terminal_scroll_viewport(session->term, behavior);
 }
 
+JNIEXPORT void JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeScrollToBottom(
+    JNIEnv*, jobject, jlong handle) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return;
+  GhosttyTerminalScrollViewport behavior{};
+  behavior.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
+  ghostty_terminal_scroll_viewport(session->term, behavior);
+}
+
+// Packs the viewport scrollbar as [total, offset, len] rows, or null when
+// there is no scrollback to indicate.
+JNIEXPORT jlongArray JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeScrollbar(
+    JNIEnv* env, jobject, jlong handle) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return nullptr;
+  GhosttyTerminalScrollbar scrollbar{};
+  if (ghostty_terminal_get(session->term, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &scrollbar) !=
+      GHOSTTY_SUCCESS) {
+    return nullptr;
+  }
+  jlongArray out = env->NewLongArray(3);
+  if (out == nullptr) return nullptr;
+  const jlong values[3] = {static_cast<jlong>(scrollbar.total),
+                           static_cast<jlong>(scrollbar.offset),
+                           static_cast<jlong>(scrollbar.len)};
+  env->SetLongArrayRegion(out, 0, 3, values);
+  return out;
+}
+
 JNIEXPORT jint JNICALL
 Java_expo_modules_libghostty_GhosttyVt_nativeSnapshot(
     JNIEnv* env, jobject, jlong handle, jobject buffer) {

@@ -7,6 +7,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.provider.Settings
@@ -25,6 +26,7 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import android.widget.OverScroller
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.ceil
@@ -129,12 +131,49 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   }
 
   private var scrollAccum = 0f
+
+  // ── Scrollback state ──
+  private val scroller = OverScroller(context)
+  private var flingLastY = 0
+  private var scrollbarTotal = 0L
+  private var scrollbarOffset = 0L
+  private var scrollbarLen = 0L
+  private var lastScrollActivityAt = 0L
+  private val scrollbarPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+  private val jumpChipPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+  private val jumpChipArrow = Path()
+  private val flingRunnable = object : Runnable {
+    override fun run() {
+      if (handle == 0L || !scroller.computeScrollOffset()) return
+      val y = scroller.currY
+      scrollAccum += (y - flingLastY).toFloat()
+      flingLastY = y
+      val deltaRows = (scrollAccum / cellHeight).toInt()
+      if (deltaRows != 0) {
+        scrollAccum -= deltaRows * cellHeight
+        GhosttyVt.nativeScroll(handle, deltaRows)
+        markScrollActivity()
+        scheduleFrame()
+      }
+      postOnAnimation(this)
+    }
+  }
+
   private val gestureDetector = GestureDetector(
     context,
     object : GestureDetector.SimpleOnGestureListener() {
       override fun onDown(e: MotionEvent) = true
 
       override fun onSingleTapUp(e: MotionEvent): Boolean {
+        if (scrollbarTotal > 0 && scrollbarOffset + scrollbarLen < scrollbarTotal) {
+          val (cx, cy) = jumpChipCenter()
+          val slop = JUMP_CHIP_RADIUS_DP * 1.5f * resources.displayMetrics.density
+          if (hypot(e.x - cx, e.y - cy) <= slop) {
+            GhosttyVt.nativeScrollToBottom(handle)
+            scheduleFrame()
+            return true
+          }
+        }
         if (selectionMode || actionMode != null) {
           clearSelection()
           return true
@@ -168,8 +207,23 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
         if (deltaRows != 0) {
           scrollAccum -= deltaRows * cellHeight
           GhosttyVt.nativeScroll(handle, deltaRows)
+          markScrollActivity()
           scheduleFrame()
         }
+        return true
+      }
+
+      override fun onFling(
+        e1: MotionEvent?,
+        e2: MotionEvent,
+        velocityX: Float,
+        velocityY: Float
+      ): Boolean {
+        if (handle == 0L) return false
+        // Finger up (negative velocity) scrolls content down: invert.
+        flingLastY = 0
+        scroller.fling(0, 0, 0, -velocityY.toInt(), 0, 0, Int.MIN_VALUE, Int.MAX_VALUE)
+        postOnAnimation(flingRunnable)
         return true
       }
     }
@@ -210,6 +264,8 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     }
     blinkScheduled = false
     removeCallbacks(blinkRunnable)
+    scroller.abortAnimation()
+    removeCallbacks(flingRunnable)
     actionMode?.finish()
     if (handle != 0L) {
       GhosttyVt.nativeFree(handle)
@@ -220,9 +276,18 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   private fun sendBytes(bytes: ByteArray) {
     if (!finished && bytes.isNotEmpty()) {
       if (selectionMode) clearSelection()
+      // Typing while scrolled into history jumps back to the live view.
+      if (handle != 0L && scrollbarOffset + scrollbarLen < scrollbarTotal) {
+        GhosttyVt.nativeScrollToBottom(handle)
+        scheduleFrame()
+      }
       holdBlinkSolid()
       onInputBytes?.invoke(bytes)
     }
+  }
+
+  private fun markScrollActivity() {
+    lastScrollActivityAt = android.os.SystemClock.uptimeMillis()
   }
 
   private fun sendText(text: CharSequence) {
@@ -328,6 +393,11 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
     val rowCount = GhosttyVt.nativeSnapshot(handle, buf)
     if (rowCount < 0) return
+    GhosttyVt.nativeScrollbar(handle)?.let { scrollbar ->
+      scrollbarTotal = scrollbar[0]
+      scrollbarOffset = scrollbar[1]
+      scrollbarLen = scrollbar[2]
+    }
 
     buf.position(0)
     buf.int // version
@@ -690,6 +760,57 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     bitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
     drawCursor(canvas)
     drawSelectionHandles(canvas)
+    drawScrollIndicator(canvas)
+    drawJumpToBottomChip(canvas)
+  }
+
+  private fun drawScrollIndicator(canvas: Canvas) {
+    if (scrollbarTotal <= scrollbarLen) return
+    val elapsed = android.os.SystemClock.uptimeMillis() - lastScrollActivityAt
+    if (elapsed > SCROLLBAR_FADE_END_MS) return
+    val alpha = if (elapsed <= SCROLLBAR_FADE_START_MS) {
+      255
+    } else {
+      (255 * (SCROLLBAR_FADE_END_MS - elapsed) / (SCROLLBAR_FADE_END_MS - SCROLLBAR_FADE_START_MS)).toInt()
+    }
+    val density = resources.displayMetrics.density
+    val barWidth = 3 * density
+    val right = width - 2 * density
+    val trackHeight = height.toFloat()
+    val top = trackHeight * scrollbarOffset / scrollbarTotal
+    val thumbHeight = max(16 * density, trackHeight * scrollbarLen / scrollbarTotal)
+    scrollbarPaint.color = SCROLLBAR_COLOR
+    scrollbarPaint.alpha = alpha
+    canvas.drawRoundRect(
+      right - barWidth, top, right, (top + thumbHeight).coerceAtMost(trackHeight),
+      barWidth / 2, barWidth / 2, scrollbarPaint
+    )
+    if (elapsed > SCROLLBAR_FADE_START_MS) invalidate()
+  }
+
+  private fun jumpChipCenter(): Pair<Float, Float> {
+    val density = resources.displayMetrics.density
+    return Pair(width - 32 * density, height - 32 * density)
+  }
+
+  private fun drawJumpToBottomChip(canvas: Canvas) {
+    if (scrollbarTotal <= 0 || scrollbarOffset + scrollbarLen >= scrollbarTotal) return
+    val density = resources.displayMetrics.density
+    val (cx, cy) = jumpChipCenter()
+    val radius = JUMP_CHIP_RADIUS_DP * density
+    jumpChipPaint.style = Paint.Style.FILL
+    jumpChipPaint.color = JUMP_CHIP_BACKGROUND
+    canvas.drawCircle(cx, cy, radius, jumpChipPaint)
+    // Downward chevron.
+    val span = radius * 0.45f
+    jumpChipArrow.reset()
+    jumpChipArrow.moveTo(cx - span, cy - span * 0.5f)
+    jumpChipArrow.lineTo(cx, cy + span * 0.5f)
+    jumpChipArrow.lineTo(cx + span, cy - span * 0.5f)
+    jumpChipPaint.style = Paint.Style.STROKE
+    jumpChipPaint.strokeWidth = 2 * density
+    jumpChipPaint.color = JUMP_CHIP_ARROW_COLOR
+    canvas.drawPath(jumpChipArrow, jumpChipPaint)
   }
 
   private fun drawCursor(canvas: Canvas) {
@@ -725,6 +846,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   // ── Input ──
 
   override fun onTouchEvent(event: MotionEvent): Boolean {
+    if (event.actionMasked == MotionEvent.ACTION_DOWN) scroller.abortAnimation()
     if (selectionMode) {
       when (event.actionMasked) {
         MotionEvent.ACTION_DOWN -> {
@@ -857,6 +979,13 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     const val MENU_COPY = 1
     const val MENU_PASTE = 2
     const val MENU_SELECT_ALL = 3
+
+    const val SCROLLBAR_FADE_START_MS = 800L
+    const val SCROLLBAR_FADE_END_MS = 1400L
+    const val SCROLLBAR_COLOR = 0xB3AAAAAA.toInt()
+    const val JUMP_CHIP_RADIUS_DP = 18f
+    const val JUMP_CHIP_BACKGROUND = 0xCC2A2A2E.toInt()
+    const val JUMP_CHIP_ARROW_COLOR = 0xFFE0E0E0.toInt()
 
     const val HEADER_BYTES = 48
     const val ROW_HEADER_BYTES = 16

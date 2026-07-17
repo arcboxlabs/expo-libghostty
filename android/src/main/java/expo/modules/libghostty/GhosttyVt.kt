@@ -29,6 +29,11 @@ internal object GhosttyVt {
   /** Scroll the viewport by [deltaRows]; negative is up (into scrollback). */
   external fun nativeScroll(handle: Long, deltaRows: Int)
 
+  external fun nativeScrollToBottom(handle: Long)
+
+  /** Viewport scrollbar as [total, offset, len] rows, or null. */
+  external fun nativeScrollbar(handle: Long): LongArray?
+
   /**
    * Update the render state and flatten dirty rows into [buffer] (direct,
    * little-endian; layout documented in ghostty_jni.cpp). Returns the number
