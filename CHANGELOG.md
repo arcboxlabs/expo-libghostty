@@ -10,6 +10,18 @@
 
 ### 💡 Others
 
+## 0.7.0 — 2026-07-17
+
+### 🎉 New features
+
+- Android: pinch-to-zoom font size, mirroring iOS (every 0.1 of pinch scale
+  steps ±1 dp, clamped to 4–64). The grid reflows in place — no output is
+  lost — and the host sees a normal `onResize`.
+- `fontSize` prop on both platforms: base font size in density-independent
+  units (default 14). Android applies changes live; on iOS a change after
+  mount rebuilds the terminal surface (grid resets), so set it before
+  mounting.
+
 ## 0.6.0 — 2026-07-17
 
 ### 🎉 New features

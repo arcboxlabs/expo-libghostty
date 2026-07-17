@@ -1,6 +1,6 @@
 {
   "name": "expo-libghostty",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Ghostty terminal view for Expo / React Native, powered by libghostty",
   "main": "build/index.js",
   "types": "build/index.d.ts",
