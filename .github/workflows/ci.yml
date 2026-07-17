@@ -52,6 +52,44 @@ jobs:
       - name: Prebuild example android project
         run: pnpm --dir example exec expo prebuild --platform android --no-install
 
-      - name: Build android module
+      # Release with minification exercises R8 over the module's reflection
+      # (expo-modules registration, Records) and JNI surface, not just compilation.
+      - name: Build example app (release, R8 minified)
         working-directory: example/android
-        run: ./gradlew :expo-libghostty:assembleDebug
+        run: >-
+          ./gradlew :app:assembleRelease
+          -Pandroid.enableMinifyInReleaseBuilds=true
+          -Pandroid.enableShrinkResourcesInReleaseBuilds=true
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      # postinstall fetches the pinned GhosttyKit XCFramework the pods vendor.
+      - run: pnpm install --frozen-lockfile
+
+      # example/ios is a prebuild artifact and not committed.
+      - name: Prebuild example ios project
+        run: pnpm --dir example exec expo prebuild --platform ios --no-install
+
+      - name: Install pods
+        working-directory: example/ios
+        run: pod install
+
+      - name: Build example app (simulator)
+        working-directory: example/ios
+        run: >-
+          set -o pipefail;
+          xcodebuild -workspace expolibghosttyexample.xcworkspace
+          -scheme expolibghosttyexample -configuration Debug
+          -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO build | xcbeautify --quiet
