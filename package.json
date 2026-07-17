@@ -8,7 +8,6 @@
     "build": "node internal/module_scripts/build.js",
     "clean": "node internal/module_scripts/clean.js",
     "lint": "eslint src/",
-    "test": "node internal/module_scripts/test.js",
     "prepare": "node internal/module_scripts/prepare.js",
     "postinstall": "node scripts/download-xcframework.mjs && node scripts/download-android-libs.mjs",
     "sync-vendor": "./scripts/sync-vendor.sh",
@@ -18,8 +17,10 @@
   "keywords": [
     "react-native",
     "expo",
-    "expo-libghostty",
-    "ExpoLibghostty"
+    "terminal",
+    "terminal-emulator",
+    "ghostty",
+    "libghostty"
   ],
   "repository": "https://github.com/arcboxlabs/expo-libghostty",
   "bugs": {
@@ -28,26 +29,14 @@
   "author": "AprilNEA <github@sku.moe> (https://github.com/AprilNEA)",
   "license": "MIT",
   "homepage": "https://github.com/arcboxlabs/expo-libghostty#readme",
-  "dependencies": {},
   "devDependencies": {
-    "@babel/core": "^7.26.0",
-    "@types/jest": "^29.2.1",
     "@types/react": "~19.2.2",
-    "babel-preset-expo": "~57.0.3",
     "eslint": "~9.39.4",
     "eslint-config-universe": "^15.0.3",
     "expo": "^57.0.5",
-    "jest": "^29.7.0",
-    "jest-expo": "~57.0.2",
     "prettier": "^3.0.0",
     "react-native": "0.86.0",
     "typescript": "^5.9.2"
-  },
-  "jest": {
-    "preset": "jest-expo",
-    "roots": [
-      "<rootDir>/src"
-    ]
   },
   "peerDependencies": {
     "expo": "*",

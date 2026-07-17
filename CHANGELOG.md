@@ -10,6 +10,11 @@
 
 ### 💡 Others
 
+- Cleaned up `create-expo-module` scaffold leftovers: LICENSE attribution is
+  now ArcBox, Inc., the podspec version is read from `package.json`, the
+  unused jest and webpack scaffolding is gone, and the example app has
+  terminal-themed icons instead of the Expo defaults.
+
 ## 0.5.0 — 2026-07-17
 
 ### 🎉 New features

@@ -1,6 +1,10 @@
+require 'json'
+
+package = JSON.parse(File.read(File.join(__dir__, '..', 'package.json')))
+
 Pod::Spec.new do |s|
   s.name           = 'ExpoLibghostty'
-  s.version        = '0.1.0'
+  s.version        = package['version']
   s.summary        = 'Ghostty terminal view for Expo / React Native'
   s.description    = 'Ghostty terminal view for Expo / React Native, powered by libghostty'
   s.author         = { 'AprilNEA' => 'github@sku.moe' }
