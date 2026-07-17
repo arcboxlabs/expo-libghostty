@@ -49,4 +49,29 @@ internal object GhosttyVt {
     unshiftedCodepoint: Int,
     utf8: ByteArray?
   ): ByteArray?
+
+  /** Select the word at a viewport cell; false when there is nothing there. */
+  external fun nativeSelectWord(handle: Long, col: Int, row: Int): Boolean
+
+  external fun nativeSelectAll(handle: Long): Boolean
+
+  /** Install a linear selection between two viewport cells (inclusive). */
+  external fun nativeSetSelection(
+    handle: Long,
+    anchorCol: Int,
+    anchorRow: Int,
+    col: Int,
+    row: Int
+  ): Boolean
+
+  external fun nativeClearSelection(handle: Long)
+
+  /** Active selection as UTF-8 (plain, unwrapped, trimmed), or null if none. */
+  external fun nativeSelectionText(handle: Long): ByteArray?
+
+  /** Conservative check: newlines / bracketed-paste escapes are unsafe. */
+  external fun nativeIsPasteSafe(data: ByteArray): Boolean
+
+  /** Encode clipboard bytes for the PTY (control-byte strip + mode-2004 wrap). */
+  external fun nativeEncodePaste(handle: Long, data: ByteArray): ByteArray?
 }

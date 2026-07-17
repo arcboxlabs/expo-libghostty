@@ -1,16 +1,24 @@
 package expo.modules.libghostty
 
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.provider.Settings
 import android.text.InputType
+import android.view.ActionMode
 import android.view.Choreographer
 import android.view.GestureDetector
+import android.view.HapticFeedbackConstants
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
@@ -21,6 +29,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -75,6 +84,19 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   private var cellTextOff = IntArray(0)
   private var cellTextLen = IntArray(0)
   private var cellFlags = IntArray(0)
+  private var rowSelStart = IntArray(0)
+  private var rowSelEnd = IntArray(0)
+
+  // ── Selection state ──
+  private var selectionMode = false
+  private var actionMode: ActionMode? = null
+  private var draggingHandle = HANDLE_NONE
+  private var dragAnchorCol = 0
+  private var dragAnchorRow = 0
+  private var lastPressCol = 0
+  private var lastPressRow = 0
+  private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+  private val handleRadius = HANDLE_RADIUS_DP * resources.displayMetrics.density
 
   private var defaultBg = 0xFF000000.toInt()
   private var defaultFg = 0xFFFFFFFF.toInt()
@@ -110,10 +132,25 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
       override fun onDown(e: MotionEvent) = true
 
       override fun onSingleTapUp(e: MotionEvent): Boolean {
+        if (selectionMode || actionMode != null) {
+          clearSelection()
+          return true
+        }
         requestFocus()
         context.getSystemService(InputMethodManager::class.java)
           ?.showSoftInput(this@GhosttyTerminalView, 0)
         return true
+      }
+
+      override fun onLongPress(e: MotionEvent) {
+        if (handle == 0L || finished) return
+        lastPressCol = (e.x / cellWidth).toInt().coerceIn(0, cols - 1)
+        lastPressRow = (e.y / cellHeight).toInt().coerceIn(0, rows - 1)
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        selectionMode = GhosttyVt.nativeSelectWord(handle, lastPressCol, lastPressRow)
+        scheduleFrame()
+        // Even without a word under the finger, offer Paste / Select all.
+        startTerminalActionMode()
       }
 
       override fun onScroll(
@@ -170,6 +207,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     }
     blinkScheduled = false
     removeCallbacks(blinkRunnable)
+    actionMode?.finish()
     if (handle != 0L) {
       GhosttyVt.nativeFree(handle)
       handle = 0
@@ -178,6 +216,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
   private fun sendBytes(bytes: ByteArray) {
     if (!finished && bytes.isNotEmpty()) {
+      if (selectionMode) clearSelection()
       holdBlinkSolid()
       onInputBytes?.invoke(bytes)
     }
@@ -221,6 +260,8 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     cellTextOff = IntArray(cols)
     cellTextLen = IntArray(cols)
     cellFlags = IntArray(cols)
+    rowSelStart = IntArray(rows) { -1 }
+    rowSelEnd = IntArray(rows) { -1 }
   }
 
   // ── Rendering ──
@@ -256,7 +297,202 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
     if (dirtyKind == DIRTY_FULL) canvas.drawColor(defaultBg)
     repeat(rowCount) { drawRowRecord(buf, canvas, snapCols) }
+    syncSelectionUi()
     invalidate()
+  }
+
+  // ── Selection ──
+
+  /** Top-left / bottom-right cells of the rendered selection, or null. */
+  private fun selectionBounds(): IntArray? {
+    var top = -1
+    var bottom = -1
+    for (row in rowSelStart.indices) {
+      if (rowSelStart[row] >= 0) {
+        if (top < 0) top = row
+        bottom = row
+      }
+    }
+    if (top < 0) return null
+    return intArrayOf(top, rowSelStart[top], bottom, rowSelEnd[bottom])
+  }
+
+  private fun syncSelectionUi() {
+    if (!selectionMode) return
+    if (selectionBounds() == null) {
+      // Scrolled out of the viewport (or collapsed): drop the whole selection
+      // so the UI and terminal state never disagree.
+      clearSelection()
+    } else {
+      actionMode?.invalidateContentRect()
+    }
+  }
+
+  private fun clearSelection() {
+    if (handle != 0L) GhosttyVt.nativeClearSelection(handle)
+    selectionMode = false
+    draggingHandle = HANDLE_NONE
+    actionMode?.finish()
+    scheduleFrame()
+  }
+
+  private fun selectAllContent() {
+    if (handle == 0L) return
+    if (GhosttyVt.nativeSelectAll(handle)) {
+      selectionMode = true
+      scheduleFrame()
+      actionMode?.invalidate()
+    }
+  }
+
+  private fun copySelection() {
+    if (handle == 0L) return
+    val bytes = GhosttyVt.nativeSelectionText(handle) ?: return
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+    clipboard.setPrimaryClip(
+      ClipData.newPlainText("terminal", String(bytes, Charsets.UTF_8))
+    )
+    clearSelection()
+  }
+
+  private fun pasteFromClipboard() {
+    if (handle == 0L || finished) return
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+    val clip = clipboard.primaryClip?.takeIf { it.itemCount > 0 } ?: return
+    val text = clip.getItemAt(0).coerceToText(context)?.toString()
+    if (text.isNullOrEmpty()) return
+    val bytes = text.toByteArray(Charsets.UTF_8)
+    if (GhosttyVt.nativeIsPasteSafe(bytes)) {
+      sendPaste(bytes)
+      return
+    }
+    AlertDialog.Builder(context)
+      .setTitle("Paste multi-line text?")
+      .setMessage("The clipboard contains newlines or control sequences that the shell may run as commands.")
+      .setPositiveButton("Paste") { _, _ -> sendPaste(bytes) }
+      .setNegativeButton(android.R.string.cancel, null)
+      .show()
+  }
+
+  private fun sendPaste(bytes: ByteArray) {
+    val encoded = GhosttyVt.nativeEncodePaste(handle, bytes) ?: return
+    if (selectionMode) clearSelection() else actionMode?.finish()
+    sendBytes(encoded)
+  }
+
+  private fun startTerminalActionMode() {
+    val current = actionMode
+    if (current != null) {
+      current.invalidate()
+      current.invalidateContentRect()
+      return
+    }
+    actionMode = startActionMode(
+      object : ActionMode.Callback2() {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+          menu.add(Menu.NONE, MENU_COPY, 0, android.R.string.copy)
+          menu.add(Menu.NONE, MENU_PASTE, 1, android.R.string.paste)
+          menu.add(Menu.NONE, MENU_SELECT_ALL, 2, android.R.string.selectAll)
+          return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+          menu.findItem(MENU_COPY)?.isVisible = selectionMode
+          return true
+        }
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+          when (item.itemId) {
+            MENU_COPY -> copySelection()
+            MENU_PASTE -> pasteFromClipboard()
+            MENU_SELECT_ALL -> selectAllContent()
+            else -> return false
+          }
+          return true
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {
+          actionMode = null
+        }
+
+        override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) {
+          outRect.set(selectionContentRect())
+        }
+      },
+      ActionMode.TYPE_FLOATING
+    )
+  }
+
+  private fun selectionContentRect(): Rect {
+    val bounds = selectionBounds()
+    return if (bounds != null) {
+      val (top, topCol, bottom, bottomCol) = bounds
+      val singleRow = top == bottom
+      Rect(
+        if (singleRow) (topCol * cellWidth).toInt() else 0,
+        top * cellHeight,
+        if (singleRow) ((bottomCol + 1) * cellWidth).toInt() else width,
+        (bottom + 1) * cellHeight
+      )
+    } else {
+      Rect(
+        (lastPressCol * cellWidth).toInt(),
+        lastPressRow * cellHeight,
+        ((lastPressCol + 1) * cellWidth).toInt(),
+        (lastPressRow + 1) * cellHeight
+      )
+    }
+  }
+
+  /** Returns which handle (start/end) is under the touch, arming the drag anchor. */
+  private fun hitTestHandle(x: Float, y: Float): Int {
+    val bounds = selectionBounds() ?: return HANDLE_NONE
+    val (top, topCol, bottom, bottomCol) = bounds
+    val slop = HANDLE_HIT_SLOP_DP * resources.displayMetrics.density
+    val startX = topCol * cellWidth
+    val startY = (top + 1) * cellHeight + handleRadius
+    val endX = (bottomCol + 1) * cellWidth
+    val endY = (bottom + 1) * cellHeight + handleRadius
+    val distStart = hypot(x - startX, y - startY)
+    val distEnd = hypot(x - endX, y - endY)
+    return when {
+      distEnd <= slop && distEnd <= distStart -> {
+        dragAnchorCol = topCol
+        dragAnchorRow = top
+        HANDLE_END
+      }
+      distStart <= slop -> {
+        dragAnchorCol = bottomCol
+        dragAnchorRow = bottom
+        HANDLE_START
+      }
+      else -> HANDLE_NONE
+    }
+  }
+
+  private fun dragSelection(x: Float, y: Float) {
+    if (handle == 0L) return
+    val col = (x / cellWidth).toInt().coerceIn(0, cols - 1)
+    // The handle hangs below its cell; aim one row above the finger.
+    val row = ((y / cellHeight).toInt() - 1).coerceIn(0, rows - 1)
+    GhosttyVt.nativeSetSelection(handle, dragAnchorCol, dragAnchorRow, col, row)
+    scheduleFrame()
+  }
+
+  private fun drawSelectionHandles(canvas: Canvas) {
+    if (!selectionMode) return
+    val bounds = selectionBounds() ?: return
+    val (top, topCol, bottom, bottomCol) = bounds
+    handlePaint.color = HANDLE_COLOR
+    val stem = max(2f, resources.displayMetrics.density * 2)
+    val startX = topCol * cellWidth
+    val startTop = ((top + 1) * cellHeight).toFloat()
+    canvas.drawRect(startX - stem / 2, startTop - cellHeight / 3f, startX + stem / 2, startTop + handleRadius, handlePaint)
+    canvas.drawCircle(startX, startTop + handleRadius, handleRadius, handlePaint)
+    val endX = (bottomCol + 1) * cellWidth
+    val endTop = ((bottom + 1) * cellHeight).toFloat()
+    canvas.drawRect(endX - stem / 2, endTop - cellHeight / 3f, endX + stem / 2, endTop + handleRadius, handlePaint)
+    canvas.drawCircle(endX, endTop + handleRadius, handleRadius, handlePaint)
   }
 
   // ── Cursor blink ──
@@ -315,6 +551,10 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     val selStart = buf.int
     val selEnd = buf.int
     val textUnits = buf.int
+    if (rowIndex < rowSelStart.size) {
+      rowSelStart[rowIndex] = selStart
+      rowSelEnd[rowIndex] = selEnd
+    }
     val cellsPos = buf.position()
     val textPos = cellsPos + snapCols * CELL_RECORD_BYTES
 
@@ -400,6 +640,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     canvas.drawColor(defaultBg)
     bitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
     drawCursor(canvas)
+    drawSelectionHandles(canvas)
   }
 
   private fun drawCursor(canvas: Canvas) {
@@ -435,6 +676,28 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   // ── Input ──
 
   override fun onTouchEvent(event: MotionEvent): Boolean {
+    if (selectionMode) {
+      when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+          draggingHandle = hitTestHandle(event.x, event.y)
+          if (draggingHandle != HANDLE_NONE) {
+            // Hide the toolbar while dragging; it comes back on release.
+            actionMode?.finish()
+            return true
+          }
+        }
+        MotionEvent.ACTION_MOVE -> if (draggingHandle != HANDLE_NONE) {
+          dragSelection(event.x, event.y)
+          return true
+        }
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+          if (draggingHandle != HANDLE_NONE) {
+            draggingHandle = HANDLE_NONE
+            startTerminalActionMode()
+            return true
+          }
+      }
+    }
     return gestureDetector.onTouchEvent(event) || super.onTouchEvent(event)
   }
 
@@ -530,6 +793,17 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     const val PUA_BMP_FIRST = 0xE000
     const val PUA_BMP_LAST = 0xF8FF
     const val PUA_SUPPLEMENTARY_FIRST = 0xF0000
+
+    const val HANDLE_NONE = 0
+    const val HANDLE_START = 1
+    const val HANDLE_END = 2
+    const val HANDLE_RADIUS_DP = 8f
+    const val HANDLE_HIT_SLOP_DP = 24f
+    const val HANDLE_COLOR = 0xFF4C8DF5.toInt()
+
+    const val MENU_COPY = 1
+    const val MENU_PASTE = 2
+    const val MENU_SELECT_ALL = 3
 
     const val HEADER_BYTES = 48
     const val ROW_HEADER_BYTES = 16

@@ -79,6 +79,30 @@ Session* fromHandle(jlong handle) {
   return reinterpret_cast<Session*>(static_cast<intptr_t>(handle));
 }
 
+bool viewportGridRef(Session* session, jint col, jint row, GhosttyGridRef* out) {
+  GhosttyPoint point{};
+  point.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+  point.value.coordinate.x = static_cast<uint16_t>(col);
+  point.value.coordinate.y = static_cast<uint32_t>(row);
+  return ghostty_terminal_grid_ref(session->term, point, out) == GHOSTTY_SUCCESS;
+}
+
+// Selection changes don't reliably mark rows dirty for our snapshot; force a
+// full re-emit so the per-row selection ranges refresh everywhere.
+void markRenderDirtyFull(Session* session) {
+  GhosttyRenderStateDirty full = GHOSTTY_RENDER_STATE_DIRTY_FULL;
+  ghostty_render_state_set(session->renderState, GHOSTTY_RENDER_STATE_OPTION_DIRTY, &full);
+}
+
+bool installSelection(Session* session, const GhosttySelection* selection) {
+  if (ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_SELECTION, selection) !=
+      GHOSTTY_SUCCESS) {
+    return false;
+  }
+  markRenderDirtyFull(session);
+  return true;
+}
+
 int32_t argb(GhosttyColorRgb color) {
   return static_cast<int32_t>(0xFF000000u | (static_cast<uint32_t>(color.r) << 16) |
                               (static_cast<uint32_t>(color.g) << 8) | color.b);
@@ -496,6 +520,146 @@ Java_expo_modules_libghostty_GhosttyVt_nativeSnapshot(
 
   header[10] = rowCount;
   return rowCount;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeSelectWord(
+    JNIEnv*, jobject, jlong handle, jint col, jint row) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return JNI_FALSE;
+  GhosttyGridRef ref{};
+  ref.size = sizeof(ref);
+  if (!viewportGridRef(session, col, row, &ref)) return JNI_FALSE;
+  GhosttyTerminalSelectWordOptions options{};
+  options.size = sizeof(options);
+  options.ref = ref;
+  GhosttySelection selection{};
+  selection.size = sizeof(selection);
+  if (ghostty_terminal_select_word(session->term, &options, &selection) != GHOSTTY_SUCCESS) {
+    return JNI_FALSE;
+  }
+  return installSelection(session, &selection) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeSelectAll(JNIEnv*, jobject, jlong handle) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return JNI_FALSE;
+  GhosttySelection selection{};
+  selection.size = sizeof(selection);
+  if (ghostty_terminal_select_all(session->term, &selection) != GHOSTTY_SUCCESS) {
+    return JNI_FALSE;
+  }
+  return installSelection(session, &selection) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeSetSelection(
+    JNIEnv*, jobject, jlong handle, jint anchorCol, jint anchorRow, jint col, jint row) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return JNI_FALSE;
+  GhosttyGridRef start{};
+  start.size = sizeof(start);
+  GhosttyGridRef end{};
+  end.size = sizeof(end);
+  if (!viewportGridRef(session, anchorCol, anchorRow, &start) ||
+      !viewportGridRef(session, col, row, &end)) {
+    return JNI_FALSE;
+  }
+  GhosttySelection selection{};
+  selection.size = sizeof(selection);
+  selection.start = start;
+  selection.end = end;
+  selection.rectangle = false;
+  return installSelection(session, &selection) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeClearSelection(JNIEnv*, jobject, jlong handle) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return;
+  ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr);
+  markRenderDirtyFull(session);
+}
+
+// Returns the active selection as UTF-8 bytes (plain, unwrapped, trimmed —
+// Ghostty's copy semantics), or null when there is no selection.
+JNIEXPORT jbyteArray JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeSelectionText(
+    JNIEnv* env, jobject, jlong handle) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return nullptr;
+  GhosttyTerminalSelectionFormatOptions options{};
+  options.size = sizeof(options);
+  options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
+  options.unwrap = true;
+  options.trim = true;
+  options.selection = nullptr;
+
+  size_t needed = 0;
+  GhosttyResult result =
+      ghostty_terminal_selection_format_buf(session->term, options, nullptr, 0, &needed);
+  if (result != GHOSTTY_OUT_OF_SPACE && result != GHOSTTY_SUCCESS) return nullptr;
+
+  std::vector<uint8_t> buf(needed);
+  size_t written = 0;
+  if (needed > 0) {
+    result = ghostty_terminal_selection_format_buf(session->term, options, buf.data(),
+                                                   buf.size(), &written);
+    if (result != GHOSTTY_SUCCESS) return nullptr;
+  }
+  jbyteArray out = env->NewByteArray(static_cast<jsize>(written));
+  if (out == nullptr) return nullptr;
+  env->SetByteArrayRegion(out, 0, static_cast<jsize>(written),
+                          reinterpret_cast<const jbyte*>(buf.data()));
+  return out;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeIsPasteSafe(
+    JNIEnv* env, jobject, jbyteArray data) {
+  if (data == nullptr) return JNI_TRUE;
+  const jsize len = env->GetArrayLength(data);
+  if (len == 0) return JNI_TRUE;
+  jbyte* bytes = env->GetByteArrayElements(data, nullptr);
+  const bool safe = ghostty_paste_is_safe(reinterpret_cast<const char*>(bytes),
+                                          static_cast<size_t>(len));
+  env->ReleaseByteArrayElements(data, bytes, JNI_ABORT);
+  return safe ? JNI_TRUE : JNI_FALSE;
+}
+
+// Encode clipboard text for the PTY: strips unsafe control bytes and wraps in
+// bracketed-paste sequences when the terminal has mode 2004 set.
+JNIEXPORT jbyteArray JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeEncodePaste(
+    JNIEnv* env, jobject, jlong handle, jbyteArray data) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr || data == nullptr) return nullptr;
+  const jsize len = env->GetArrayLength(data);
+  std::vector<char> input(static_cast<size_t>(len));
+  if (len > 0) {
+    env->GetByteArrayRegion(data, 0, len, reinterpret_cast<jbyte*>(input.data()));
+  }
+
+  bool bracketed = false;
+  ghostty_terminal_mode_get(session->term, GHOSTTY_MODE_BRACKETED_PASTE, &bracketed);
+
+  // Bracketed wrapping adds 12 bytes; stripping/CR replacement is 1:1.
+  std::vector<char> out(input.size() + 16);
+  size_t written = 0;
+  GhosttyResult result = ghostty_paste_encode(input.data(), input.size(), bracketed,
+                                              out.data(), out.size(), &written);
+  if (result == GHOSTTY_OUT_OF_SPACE) {
+    out.resize(written);
+    result = ghostty_paste_encode(input.data(), input.size(), bracketed, out.data(),
+                                  out.size(), &written);
+  }
+  if (result != GHOSTTY_SUCCESS) return nullptr;
+  jbyteArray outArray = env->NewByteArray(static_cast<jsize>(written));
+  if (outArray == nullptr) return nullptr;
+  env->SetByteArrayRegion(outArray, 0, static_cast<jsize>(written),
+                          reinterpret_cast<const jbyte*>(out.data()));
+  return outArray;
 }
 
 JNIEXPORT jbyteArray JNICALL

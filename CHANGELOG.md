@@ -10,6 +10,19 @@
 
 ### 💡 Others
 
+## 0.5.0 — 2026-07-17
+
+### 🎉 New features
+
+- Android: touch selection and clipboard. Long-press selects the word under
+  the finger (ghostty word-boundary semantics); draggable handles adjust the
+  range; the floating action-mode toolbar offers Copy / Paste / Select all.
+  Copy extracts text with ghostty's copy semantics (unwrap + trim); paste is
+  encoded through ghostty (control-byte strip, bracketed paste when mode 2004
+  is set) with a confirmation dialog for multi-line clipboard content.
+  Selection follows scrollback via terminal-tracked references and clears on
+  any typed input.
+
 ## 0.4.0 — 2026-07-17
 
 ### 🎉 New features
