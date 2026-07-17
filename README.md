@@ -112,9 +112,10 @@ Expo autolinking cannot consume Swift packages, so the pure-Swift layers of
 libghostty-spm (`GhosttyKit`, `GhosttyTerminal`) and `MSDisplayLink` are
 vendored under `ios/vendor/` as CocoaPods mirroring the upstream SPM products
 (all MIT, licenses included). `vendor-manifest.json` pins the upstream tags
-and the XCFramework checksum; `pnpm sync-vendor` re-syncs. Once React Native
-supports SPM dependencies this layer disappears in favor of the upstream
-package.
+and the XCFramework checksum; `pnpm sync-vendor` re-syncs. A weekly
+`vendor-watch` workflow compares every pin against upstream and keeps a
+drift issue open while any is behind. Once React Native supports SPM
+dependencies this layer disappears in favor of the upstream package.
 
 On Android, `android/vendor/` holds per-ABI `libghostty-vt.a` static
 libraries plus the matching C headers, cross-compiled from a pinned ghostty

@@ -1,0 +1,25 @@
+# Dependabot only covers the standard ecosystems here (npm devDependencies
+# and workflow actions). The vendored native layer (vendor-manifest.json) is
+# a custom manifest it cannot read — .github/workflows/vendor-watch.yml
+# tracks those pins instead.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dev-dependencies:
+        patterns: ['*']
+    ignore:
+      # Locked to the Expo SDK; bumped together as an SDK upgrade.
+      - dependency-name: expo
+      - dependency-name: react-native
+      - dependency-name: react
+      - dependency-name: react-dom
+      - dependency-name: '@types/react'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
