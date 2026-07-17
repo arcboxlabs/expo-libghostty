@@ -12,6 +12,11 @@ class ExpoLibghosttyModule : Module() {
     View(ExpoLibghosttyView::class) {
       Events("onInput", "onResize")
 
+      // Base font size in dp (default 14); applied live, the grid reflows.
+      Prop("fontSize") { view: ExpoLibghosttyView, size: Float ->
+        view.setFontSize(size)
+      }
+
       // PTY output bytes (base64) → terminal grid.
       AsyncFunction("write") { view: ExpoLibghosttyView, base64: String ->
         val data = try {

@@ -7,6 +7,12 @@ public class ExpoLibghosttyModule: Module {
     View(ExpoLibghosttyView.self) {
       Events("onInput", "onResize")
 
+      // Base font size in points (default 14). Changing it after mount
+      // rebuilds the surface and resets the grid.
+      Prop("fontSize") { (view: ExpoLibghosttyView, size: Float?) in
+        view.fontSize = size
+      }
+
       // PTY output bytes (base64) → terminal grid.
       AsyncFunction("write") { (view: ExpoLibghosttyView, base64: String) in
         guard let data = Data(base64Encoded: base64) else {

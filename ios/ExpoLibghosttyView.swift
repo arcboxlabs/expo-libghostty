@@ -8,6 +8,19 @@ class ExpoLibghosttyView: ExpoView {
   private let terminalView = TerminalView(frame: .zero)
   private var session: InMemoryTerminalSession?
 
+  /// Base font size in points (nil → ghostty's default, 14). Changing it on a
+  /// mounted view rebuilds the surface, which resets the grid — set it before
+  /// mounting. Pinch-to-zoom steps from this value.
+  var fontSize: Float? {
+    didSet {
+      guard fontSize != oldValue, let session else { return }
+      terminalView.configuration = TerminalSurfaceOptions(
+        backend: .inMemory(session),
+        fontSize: fontSize
+      )
+    }
+  }
+
   let onInput = EventDispatcher()
   let onResize = EventDispatcher()
 

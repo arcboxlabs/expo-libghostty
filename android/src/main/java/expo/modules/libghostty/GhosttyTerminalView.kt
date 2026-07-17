@@ -21,6 +21,7 @@ import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
@@ -55,6 +56,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   private var finished = false
 
   // ── Cell metrics ──
+  private var fontSizeDp = FONT_SIZE_DP
   private val textPaint = newTextPaint(Typeface.MONOSPACE)
   private val boldPaint = newTextPaint(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD))
   private val italicPaint = newTextPaint(Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC))
@@ -70,11 +72,11 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   }
   private val fillPaint = Paint()
   private val cursorPaint = Paint()
-  private val cellWidth = textPaint.measureText("M")
-  private val cellHeight = ceil(
+  private var cellWidth = textPaint.measureText("M")
+  private var cellHeight = ceil(
     textPaint.fontMetrics.descent - textPaint.fontMetrics.ascent
   ).toInt()
-  private val baseline = -textPaint.fontMetrics.ascent
+  private var baseline = -textPaint.fontMetrics.ascent
   private val underlineThickness = max(1f, resources.displayMetrics.density)
 
   // ── Grid state ──
@@ -193,7 +195,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
       }
 
       override fun onLongPress(e: MotionEvent) {
-        if (handle == 0L || finished) return
+        if (handle == 0L || finished || scaleDetector.isInProgress) return
         lastPressCol = (e.x / cellWidth).toInt().coerceIn(0, cols - 1)
         lastPressRow = (e.y / cellHeight).toInt().coerceIn(0, rows - 1)
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -217,7 +219,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
         distanceX: Float,
         distanceY: Float
       ): Boolean {
-        if (handle == 0L) return false
+        if (handle == 0L || scaleDetector.isInProgress) return false
         scrollAccum += distanceY
         val deltaRows = (scrollAccum / cellHeight).toInt()
         if (deltaRows != 0) {
@@ -235,11 +237,36 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
         velocityX: Float,
         velocityY: Float
       ): Boolean {
-        if (handle == 0L) return false
+        if (handle == 0L || scaleDetector.isInProgress) return false
         // Finger up (negative velocity) scrolls content down: invert.
         flingLastY = 0
         scroller.fling(0, 0, 0, -velocityY.toInt(), 0, 0, Int.MIN_VALUE, Int.MAX_VALUE)
         postOnAnimation(flingRunnable)
+        return true
+      }
+    }
+  )
+
+  // Mirrors the iOS pinch-zoom: every 0.1 of accumulated scale steps the
+  // font size by ±1dp through the same path as the fontSize prop.
+  private var pinchScale = 1f
+  private var pinchLastScale = 1f
+  private val scaleDetector = ScaleGestureDetector(
+    context,
+    object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+      override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+        pinchScale = 1f
+        pinchLastScale = 1f
+        return true
+      }
+
+      override fun onScale(detector: ScaleGestureDetector): Boolean {
+        pinchScale *= detector.scaleFactor
+        val steps = ((pinchScale - pinchLastScale) / PINCH_SCALE_STEP).toInt()
+        if (steps != 0) {
+          pinchLastScale += steps * PINCH_SCALE_STEP
+          setFontSize(fontSizeDp + steps)
+        }
         return true
       }
     }
@@ -252,7 +279,28 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
   private fun newTextPaint(typeface: Typeface) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     this.typeface = typeface
-    textSize = FONT_SIZE_DP * resources.displayMetrics.density
+    textSize = fontSizeDp * resources.displayMetrics.density
+  }
+
+  /**
+   * Base font size in dp (default 14, clamped to 4–64 like iOS); pinch-to-zoom
+   * steps from the current value. Content reflows in place — libghostty-vt
+   * owns the grid state, so no output is lost.
+   */
+  fun setFontSize(dp: Float) {
+    val clamped = dp.coerceIn(MIN_FONT_SIZE_DP, MAX_FONT_SIZE_DP)
+    if (clamped == fontSizeDp) return
+    fontSizeDp = clamped
+    val px = clamped * resources.displayMetrics.density
+    for (paint in arrayOf(textPaint, boldPaint, italicPaint, boldItalicPaint, symbolsPaint)) {
+      paint?.textSize = px
+    }
+    cellWidth = textPaint.measureText("M")
+    cellHeight = ceil(textPaint.fontMetrics.descent - textPaint.fontMetrics.ascent).toInt()
+    baseline = -textPaint.fontMetrics.ascent
+    // Cell geometry moved under any active selection handles.
+    if (selectionMode || actionMode != null) clearSelection()
+    updateGridGeometry(force = true)
   }
 
   // ── Session I/O ──
@@ -360,13 +408,17 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
   override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
     super.onSizeChanged(w, h, oldw, oldh)
-    if (w <= 0 || h <= 0 || handle == 0L) return
-    val newCols = max(2, floor(w / cellWidth).toInt())
-    val newRows = max(2, h / cellHeight)
+    updateGridGeometry(force = false)
+  }
+
+  private fun updateGridGeometry(force: Boolean) {
+    if (width <= 0 || height <= 0 || handle == 0L) return
+    val newCols = max(2, floor(width / cellWidth).toInt())
+    val newRows = max(2, height / cellHeight)
     val changed = newCols != cols || newRows != rows
     cols = newCols
     rows = newRows
-    if (changed || bitmap == null) {
+    if (changed || force || bitmap == null) {
       GhosttyVt.nativeResize(handle, cols, rows, cellWidth.roundToInt(), cellHeight)
       allocateGridBuffers()
       onGridResize?.invoke(cols, rows)
@@ -874,6 +926,17 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
   override fun onTouchEvent(event: MotionEvent): Boolean {
     if (event.actionMasked == MotionEvent.ACTION_DOWN) scroller.abortAnimation()
+    scaleDetector.onTouchEvent(event)
+    if (scaleDetector.isInProgress) {
+      if (draggingHandle != HANDLE_NONE) {
+        draggingHandle = HANDLE_NONE
+        magnifier?.dismiss()
+      }
+      // Keep the tap/long-press detector's stream consistent; its callbacks
+      // are guarded on isInProgress.
+      gestureDetector.onTouchEvent(event)
+      return true
+    }
     if (selectionMode) {
       when (event.actionMasked) {
         MotionEvent.ACTION_DOWN -> {
@@ -985,6 +1048,10 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
   private companion object {
     const val FONT_SIZE_DP = 14f
+    // Same bounds and step as the iOS pinch-zoom (UITerminalView).
+    const val MIN_FONT_SIZE_DP = 4f
+    const val MAX_FONT_SIZE_DP = 64f
+    const val PINCH_SCALE_STEP = 0.1f
     const val INITIAL_COLS = 80
     const val INITIAL_ROWS = 24
     const val MAX_SCROLLBACK = 10_000L

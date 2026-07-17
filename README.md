@@ -73,6 +73,7 @@ export function Terminal({ pty }) {
 
 | `<TerminalView>` prop | Description                                                                                                                         |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `fontSize`            | Base font size in density-independent units (default 14, clamped 4–64); pinch-to-zoom steps from it. Android applies changes live (the grid reflows); iOS rebuilds the surface on change, resetting the grid — set it before mounting. |
 | `onInput`             | User keyboard/IME input to forward to the PTY. `nativeEvent.data` is base64 bytes; `nativeEvent.text` is the same decoded as UTF-8. |
 | `onResize`            | Grid resized (layout, rotation, font change). Forward `nativeEvent.cols` / `nativeEvent.rows` to the PTY.                           |
 | `ref`                 | Imperative handle (`TerminalViewRef`), methods below.                                                                               |
@@ -99,7 +100,7 @@ where the platforms do:
 | Touch selection + clipboard       | ✅                        | ✅ long-press word, drag handles, magnifier, floating Copy/Paste/Select all; bracketed paste with unsafe-paste confirm |
 | Scrollback                        | ✅                        | ✅ inertial fling, fading indicator, jump-to-bottom chip |
 | Cursor blink (DECSCUSR)           | ✅                        | ✅ (holds solid on I/O, honors animations-off)  |
-| Pinch-to-zoom font size           | ✅                        | ❌ (fixed 14 dp for now)                        |
+| Pinch-to-zoom font size           | ✅                        | ✅ (same 0.1-scale → ±1 steps, 4–64 bounds)     |
 
 ## Vendoring
 

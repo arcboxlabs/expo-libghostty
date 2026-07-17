@@ -77,6 +77,9 @@ class ExpoLibghosttyView(context: Context, appContext: AppContext) :
     syncAccessoryBar(WindowInsetsCompat.toWindowInsetsCompat(rootInsets, this))
   }
 
+  /** Base font size in dp; applied live (the grid reflows in place). */
+  fun setFontSize(dp: Float) = terminal.setFontSize(dp)
+
   /** Feed PTY output (terminal.output on the wire) into the grid. */
   fun write(data: ByteArray) = terminal.write(data)
 

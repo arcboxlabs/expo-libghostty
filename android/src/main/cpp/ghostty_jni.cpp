@@ -288,6 +288,10 @@ Java_expo_modules_libghostty_GhosttyVt_nativeResize(
   ghostty_terminal_resize(session->term, static_cast<uint16_t>(cols),
                           static_cast<uint16_t>(rows), static_cast<uint32_t>(cellWidthPx),
                           static_cast<uint32_t>(cellHeightPx));
+  // The renderer discards its bitmap on every resize; a same-grid resize
+  // (font-size change landing on identical cols/rows) would otherwise leave
+  // no dirty rows to repaint it with.
+  markRenderDirtyFull(session);
 }
 
 JNIEXPORT void JNICALL
