@@ -15,8 +15,8 @@
     "repo": "https://github.com/ghostty-org/ghostty.git",
     "commit": "b0947378349eff70f7030dda0e6d022fae1e6fbd",
     "android": {
-      "url": "https://github.com/arcboxlabs/expo-libghostty/releases/download/storage.libghostty-vt.b0947378349e/libghostty-vt-android-b0947378349e.tar.gz",
-      "sha256": "4e97e33b7685e477aa0078992e01262ceb51688914370604d12390069c1603a1"
+      "url": "https://github.com/arcboxlabs/expo-libghostty/releases/download/storage.libghostty-vt.b0947378349e.r3/libghostty-vt-android-b0947378349e-r3.tar.gz",
+      "sha256": "b38f032f3f5e42cd3686ba6a10ecbb0669382de8df74ddd44be30e362c637d96"
     }
   }
 }
