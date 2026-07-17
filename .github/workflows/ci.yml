@@ -22,6 +22,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm exec tsc --noEmit
+      - run: pnpm test
       - run: pnpm clean && pnpm build
 
   android:
@@ -51,6 +52,10 @@ jobs:
       # example/android is a prebuild artifact and not committed.
       - name: Prebuild example android project
         run: pnpm --dir example exec expo prebuild --platform android --no-install
+
+      - name: Run module unit tests
+        working-directory: example/android
+        run: ./gradlew :expo-libghostty:testDebugUnitTest
 
       # Release with minification exercises R8 over the module's reflection
       # (expo-modules registration, Records) and JNI surface, not just compilation.

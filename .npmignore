@@ -20,3 +20,8 @@
 /eslint.config.cjs
 /pnpm-workspace.yaml
 /tsconfig.json
+
+# Tests never ship
+/vitest.config.ts
+/src/__tests__/
+/android/src/test/

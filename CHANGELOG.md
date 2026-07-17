@@ -10,6 +10,12 @@
 
 ### 💡 Others
 
+- First automated test suites: vitest covers the TerminalView imperative
+  queue (the 0.8.1 mount-race contract), and JUnit covers the Android
+  snapshot wire format, cell color resolution, and the sticky-modifier state
+  machine (extracted into `SnapshotFormat.kt` / `StickyModifier.kt`). Both
+  run in CI.
+
 ## 0.8.1 — 2026-07-17
 
 ### 🐛 Bug fixes
