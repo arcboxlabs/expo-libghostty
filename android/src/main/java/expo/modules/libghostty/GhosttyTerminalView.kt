@@ -46,6 +46,9 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   var onInputBytes: ((ByteArray) -> Unit)? = null
   var onGridResize: ((cols: Int, rows: Int) -> Unit)? = null
 
+  /** Sticky-modifier source for accessory-bar keys and IME text (optional). */
+  var accessoryBar: TerminalAccessoryBar? = null
+
   private var handle: Long = GhosttyVt.nativeCreate(INITIAL_COLS, INITIAL_ROWS, MAX_SCROLLBACK)
   private var finished = false
 
@@ -223,7 +226,53 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   }
 
   private fun sendText(text: CharSequence) {
-    if (text.isNotEmpty()) sendBytes(text.toString().toByteArray(Charsets.UTF_8))
+    if (text.isEmpty()) return
+    // A lit sticky modifier turns the next single-char IME commit into a key
+    // chord (Ctrl+C etc.) through ghostty's encoder.
+    val bar = accessoryBar
+    val meta = bar?.stickyMetaState() ?: 0
+    if (meta != 0 && text.length == 1) {
+      val keyCode = charToKeyCode(text[0])
+      if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
+        bar?.consumeSticky()
+        val bytes = GhosttyVt.nativeEncodeKey(
+          handle, keyCode, 1, meta, text[0].lowercaseChar().code, null
+        )
+        if (bytes != null && bytes.isNotEmpty()) sendBytes(bytes)
+        return
+      }
+    }
+    sendBytes(text.toString().toByteArray(Charsets.UTF_8))
+  }
+
+  /** Send an accessory-bar key press with the current sticky modifiers. */
+  fun sendAccessoryKey(keyCode: Int) {
+    if (handle == 0L || finished) return
+    val meta = accessoryBar?.stickyMetaState() ?: 0
+    accessoryBar?.consumeSticky()
+    val bytes = GhosttyVt.nativeEncodeKey(handle, keyCode, 1, meta, 0, null) ?: return
+    if (bytes.isNotEmpty()) sendBytes(bytes)
+  }
+
+  private fun charToKeyCode(char: Char): Int {
+    val lower = char.lowercaseChar()
+    return when (lower) {
+      in 'a'..'z' -> KeyEvent.KEYCODE_A + (lower - 'a')
+      in '0'..'9' -> KeyEvent.KEYCODE_0 + (lower - '0')
+      ' ' -> KeyEvent.KEYCODE_SPACE
+      '[' -> KeyEvent.KEYCODE_LEFT_BRACKET
+      ']' -> KeyEvent.KEYCODE_RIGHT_BRACKET
+      '-' -> KeyEvent.KEYCODE_MINUS
+      '=' -> KeyEvent.KEYCODE_EQUALS
+      '\\' -> KeyEvent.KEYCODE_BACKSLASH
+      '/' -> KeyEvent.KEYCODE_SLASH
+      '.' -> KeyEvent.KEYCODE_PERIOD
+      ',' -> KeyEvent.KEYCODE_COMMA
+      ';' -> KeyEvent.KEYCODE_SEMICOLON
+      '\'' -> KeyEvent.KEYCODE_APOSTROPHE
+      '`' -> KeyEvent.KEYCODE_GRAVE
+      else -> KeyEvent.KEYCODE_UNKNOWN
+    }
   }
 
   // ── Layout / resize ──
@@ -735,7 +784,11 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
       KeyEvent.ACTION_UP -> 0
       else -> return false
     }
-    val metaState = event.metaState
+    // Sticky accessory-bar modifiers apply to hardware keys too.
+    val bar = accessoryBar
+    val stickyMeta = if (action == 1) bar?.stickyMetaState() ?: 0 else 0
+    if (stickyMeta != 0) bar?.consumeSticky()
+    val metaState = event.metaState or stickyMeta
     val unicode = event.getUnicodeChar(
       metaState and (KeyEvent.META_CTRL_MASK or KeyEvent.META_META_MASK).inv()
     )
