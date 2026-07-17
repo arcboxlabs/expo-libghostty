@@ -12,8 +12,10 @@ Android via [libghostty-vt](https://github.com/ghostty-org/ghostty) with a
 Canvas renderer.
 
 - Real VT parsing from ghostty's core on both platforms
+- Theming (background/foreground/cursor/selection + 256-color palette) and
+  font size, with pinch-to-zoom
 - iOS: GPU (Metal) rendering, CJK IME, keyboard accessory bar with sticky
-  modifiers, touch selection, pinch-to-zoom font size
+  modifiers, touch selection
 - Android: libghostty-vt state machine + JNI, dirty-row Canvas rendering
   (system font fallback covers CJK/emoji; bundled Symbols Nerd Font covers
   private-use glyphs), IME text input, hardware keys via ghostty's key
@@ -74,6 +76,7 @@ export function Terminal({ pty }) {
 | `<TerminalView>` prop | Description                                                                                                                         |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `fontSize`            | Base font size in density-independent units (default 14, clamped 4–64); pinch-to-zoom steps from it. Android applies changes live (the grid reflows); iOS rebuilds the surface on change, resetting the grid — set it before mounting. |
+| `theme`               | Terminal colors: `background`, `foreground`, `cursorColor`, `selectionBackground`, `selectionForeground`, and `palette` (overrides by index, 0–255). Values use ghostty config syntax (hex or X11 names); invalid values are ignored with a warning. Android applies the theme per view; on iOS it is app-wide. |
 | `onInput`             | User keyboard/IME input to forward to the PTY. `nativeEvent.data` is base64 bytes; `nativeEvent.text` is the same decoded as UTF-8. |
 | `onResize`            | Grid resized (layout, rotation, font change). Forward `nativeEvent.cols` / `nativeEvent.rows` to the PTY.                           |
 | `ref`                 | Imperative handle (`TerminalViewRef`), methods below.                                                                               |
@@ -101,6 +104,7 @@ where the platforms do:
 | Scrollback                        | ✅                        | ✅ inertial fling, fading indicator, jump-to-bottom chip |
 | Cursor blink (DECSCUSR)           | ✅                        | ✅ (holds solid on I/O, honors animations-off)  |
 | Pinch-to-zoom font size           | ✅                        | ✅ (same 0.1-scale → ±1 steps, 4–64 bounds)     |
+| Theme colors (`theme` prop)       | ✅ app-wide (controller config) | ✅ per view (terminal default colors)     |
 
 ## Vendoring
 

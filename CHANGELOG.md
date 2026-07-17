@@ -10,6 +10,22 @@
 
 ### 💡 Others
 
+## 0.8.0 — 2026-07-17
+
+### 🎉 New features
+
+- `theme` prop on both platforms: `background`, `foreground`, `cursorColor`,
+  `selectionBackground`, `selectionForeground`, and `palette` overrides by
+  index (0–255). Values use ghostty config syntax (hex or X11 names).
+  Android sets the terminal's default colors through libghostty-vt (so OSC
+  4/10/11/12 queries and resets stay truthful) per view; iOS applies the
+  theme app-wide through the shared controller's config.
+- Android: the keyboard accessory bar now mirrors the iOS input accessory
+  bar — same default key set (esc/tab/ctrl/alt, arrows, shell symbols,
+  paste) as circular buttons, and the same sticky-modifier cycle: tap arms
+  Ctrl/Alt for the next key, a quick double tap locks them (with the bottom
+  indicator) until tapped again.
+
 ## 0.7.0 — 2026-07-17
 
 ### 🎉 New features
