@@ -6,6 +6,14 @@
 
 ### 🎉 New features
 
+### 🐛 Bug fixes
+
+### 💡 Others
+
+## 0.6.0 — 2026-07-17
+
+### 🎉 New features
+
 - Android: keyboard accessory bar (Esc / Ctrl / Alt / Tab / arrows / nav)
   above the soft keyboard. Ctrl and Alt are sticky and compose the next key
   — from the bar, the IME, or a hardware keyboard — through ghostty's
@@ -16,8 +24,6 @@
 - Android: selection polish — long-press keeps extending the selection
   without lifting, drags show the system magnifier (API 28+), and the end
   handle accounts for wide (CJK) final cells.
-
-### 🐛 Bug fixes
 
 ### 💡 Others
 

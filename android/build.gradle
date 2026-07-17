@@ -4,13 +4,13 @@ plugins {
 }
 
 group = 'expo.modules.libghostty'
-version = '0.5.0'
+version = '0.6.0'
 
 android {
   namespace "expo.modules.libghostty"
   defaultConfig {
-    versionCode 3
-    versionName "0.5.0"
+    versionCode 4
+    versionName "0.6.0"
     // Prebuilt libghostty-vt.a is only vendored for these ABIs (see
     // android/vendor/); 32-bit ABIs are not supported.
     ndk {
