@@ -10,6 +10,28 @@
 
 ### 💡 Others
 
+## 0.8.1 — 2026-07-17
+
+### 🐛 Bug fixes
+
+- Imperative calls (`write`, `writeText`, `finish`) issued before the native
+  view finished registering — e.g. `write()` in a mount effect — were
+  rejected with "unable to find view" and silently dropped in release builds,
+  where JS starts faster than the UI thread commits. `TerminalView` now
+  queues such calls and flushes them, in order, once the view reports its
+  first grid size.
+
+### 💡 Others
+
+- Every pod now ships a `PrivacyInfo.xcprivacy` privacy manifest:
+  GhosttyTerminal declares system-boot-time access (`ProcessInfo.systemUptime`
+  for elapsed-time measurement, reason 35F9.1) and GhosttyKit declares
+  file-timestamp access (`fstat`/`fstatat` referenced by the prebuilt
+  libghostty binary, reason C617.1); ExpoLibghostty and MSDisplayLink declare
+  no accessed APIs. Fixes App Store ITMS-91053 warnings for consumers.
+- CI now builds the Android example as a minified release (exercising R8
+  over the module) and builds the example for the iOS simulator on macOS.
+
 ## 0.8.0 — 2026-07-17
 
 ### 🎉 New features
