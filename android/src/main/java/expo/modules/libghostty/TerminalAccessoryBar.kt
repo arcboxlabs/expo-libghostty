@@ -6,11 +6,13 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -44,20 +46,24 @@ internal class TerminalAccessoryBar(context: Context) : HorizontalScrollView(con
     minimumHeight = dp(BAR_HEIGHT_DP)
     addView(row, LayoutParams(LayoutParams.WRAP_CONTENT, dp(BAR_HEIGHT_DP)))
 
-    addKey("⎋") { onKey?.invoke(KeyEvent.KEYCODE_ESCAPE) }
-    addKey("⇥") { onKey?.invoke(KeyEvent.KEYCODE_TAB) }
-    ctrlButton = addKey("⌃") { toggle(ctrl) }
-    altButton = addKey("⌥") { toggle(alt) }
+    addKey("⎋", "Escape") { onKey?.invoke(KeyEvent.KEYCODE_ESCAPE) }
+    addKey("⇥", "Tab") { onKey?.invoke(KeyEvent.KEYCODE_TAB) }
+    ctrlButton = addKey("⌃", "Control") { toggle(ctrl) }
+    altButton = addKey("⌥", "Alt") { toggle(alt) }
     addDivider()
-    addKey("◀") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_LEFT) }
-    addKey("▲") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_UP) }
-    addKey("▼") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_DOWN) }
-    addKey("▶") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_RIGHT) }
+    addKey("◀", "Arrow left") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_LEFT) }
+    addKey("▲", "Arrow up") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_UP) }
+    addKey("▼", "Arrow down") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_DOWN) }
+    addKey("▶", "Arrow right") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_RIGHT) }
     addDivider()
-    for (symbol in arrayOf("|", "/", "~", "-", "_", "`", "'", "\"")) {
-      addKey(symbol) { onText?.invoke(symbol) }
+    val symbols = arrayOf(
+      "|" to "Pipe", "/" to "Slash", "~" to "Tilde", "-" to "Hyphen",
+      "_" to "Underscore", "`" to "Backtick", "'" to "Single quote", "\"" to "Double quote"
+    )
+    for ((symbol, name) in symbols) {
+      addKey(symbol, name) { onText?.invoke(symbol) }
     }
-    addKey("⎘") { onPaste?.invoke() }
+    addKey("⎘", "Paste") { onPaste?.invoke() }
   }
 
   /** KeyEvent meta bits for the currently lit sticky modifiers. */
@@ -83,11 +89,22 @@ internal class TerminalAccessoryBar(context: Context) : HorizontalScrollView(con
   private fun syncModifierVisuals() {
     ctrlButton.setActivation(ctrl.engaged, ctrl.locked)
     altButton.setActivation(alt.engaged, alt.locked)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      ctrlButton.stateDescription = stickyStateDescription(ctrl)
+      altButton.stateDescription = stickyStateDescription(alt)
+    }
   }
 
-  private fun addKey(label: String, onTap: () -> Unit): KeyButton {
+  private fun stickyStateDescription(modifier: StickyModifier): String? = when {
+    modifier.locked -> "Locked"
+    modifier.engaged -> "Armed for the next key"
+    else -> null
+  }
+
+  private fun addKey(label: String, description: String, onTap: () -> Unit): KeyButton {
     val key = KeyButton(context)
     key.text = label
+    key.contentDescription = description
     key.setOnClickListener {
       it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
       onTap()
@@ -101,6 +118,7 @@ internal class TerminalAccessoryBar(context: Context) : HorizontalScrollView(con
 
   private fun addDivider() {
     val dot = View(context)
+    dot.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     val shape = GradientDrawable()
     shape.shape = GradientDrawable.OVAL
     shape.setColor(DIVIDER_COLOR)
@@ -135,6 +153,11 @@ internal class TerminalAccessoryBar(context: Context) : HorizontalScrollView(con
       setTextColor(if (active) ACTIVE_FOREGROUND else REGULAR_FOREGROUND)
       lockPaint.color = currentTextColor
       invalidate()
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+      super.onInitializeAccessibilityNodeInfo(info)
+      info.className = "android.widget.Button"
     }
 
     override fun onDraw(canvas: Canvas) {

@@ -280,6 +280,8 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   init {
     isFocusable = true
     isFocusableInTouchMode = true
+    // Consumers can override via the standard accessibilityLabel view prop.
+    contentDescription = "Terminal"
   }
 
   private fun newTextPaint(typeface: Typeface) = Paint(Paint.ANTI_ALIAS_FLAG).apply {

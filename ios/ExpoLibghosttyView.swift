@@ -66,6 +66,11 @@ class ExpoLibghosttyView: ExpoView {
     terminalView.controller = TerminalController.shared
     terminalView.configuration = TerminalSurfaceOptions(backend: .inMemory(session))
     terminalView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    // VoiceOver: one focusable element; direct interaction keeps touches
+    // (taps, selection) flowing to the terminal instead of being swallowed.
+    terminalView.isAccessibilityElement = true
+    terminalView.accessibilityLabel = "Terminal"
+    terminalView.accessibilityTraits = [.allowsDirectInteraction]
     addSubview(terminalView)
   }
 

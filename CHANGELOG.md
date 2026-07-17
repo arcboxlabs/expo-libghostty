@@ -6,6 +6,13 @@
 
 ### 🎉 New features
 
+- Baseline screen-reader support. Android: the terminal announces as
+  "Terminal" (overridable via `accessibilityLabel`), accessory keys expose
+  names ("Escape", "Control", …) with a button role, sticky modifiers report
+  their armed/locked state (API 30+), and decorative dividers are skipped.
+  iOS: the terminal surface is a VoiceOver element with direct interaction,
+  matching the upstream accessory bar's existing labels.
+
 ### 🐛 Bug fixes
 
 ### 💡 Others
