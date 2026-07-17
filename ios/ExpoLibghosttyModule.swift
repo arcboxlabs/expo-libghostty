@@ -5,7 +5,7 @@ public class ExpoLibghosttyModule: Module {
     Name("ExpoLibghostty")
 
     View(ExpoLibghosttyView.self) {
-      Events("onInput", "onResize")
+      Events("onInput", "onResize", "onBell", "onTitleChange", "onDirectoryChange")
 
       // Base font size in points (default 14). Changing it after mount
       // rebuilds the surface and resets the grid.

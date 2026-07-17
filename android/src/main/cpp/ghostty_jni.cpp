@@ -59,6 +59,12 @@ constexpr size_t kCellRecordBytes = 16;
 // Cap per-cell grapheme text; anything longer is truncated (degenerate input).
 constexpr uint32_t kMaxCellTextUnits = 32;
 
+// Event flags drained by nativeTakeEventFlags after each write; must mirror
+// GhosttyVt.EVENT_* on the Kotlin side.
+constexpr jint kEventBell = 1;
+constexpr jint kEventTitle = 1 << 1;
+constexpr jint kEventPwd = 1 << 2;
+
 struct Session {
   GhosttyTerminal term = nullptr;
   GhosttyRenderState renderState = nullptr;
@@ -69,11 +75,40 @@ struct Session {
   // Query responses emitted by the terminal during vt_write; forwarded to the
   // PTY by the caller after each write.
   std::vector<uint8_t> ptyOut;
+  // Effects observed during vt_write, drained by nativeTakeEventFlags.
+  jint pendingEvents = 0;
 };
 
 void writePtyCallback(GhosttyTerminal, void* userdata, const uint8_t* data, size_t len) {
   auto* session = static_cast<Session*>(userdata);
   session->ptyOut.insert(session->ptyOut.end(), data, data + len);
+}
+
+void bellCallback(GhosttyTerminal, void* userdata) {
+  static_cast<Session*>(userdata)->pendingEvents |= kEventBell;
+}
+
+void titleChangedCallback(GhosttyTerminal, void* userdata) {
+  static_cast<Session*>(userdata)->pendingEvents |= kEventTitle;
+}
+
+void pwdChangedCallback(GhosttyTerminal, void* userdata) {
+  static_cast<Session*>(userdata)->pendingEvents |= kEventPwd;
+}
+
+// DATA_TITLE / DATA_PWD return borrowed, non-null-terminated UTF-8; copy to a
+// byte array and decode Kotlin-side (NewStringUTF chokes on supplementary
+// characters).
+jbyteArray stringData(JNIEnv* env, Session* session, GhosttyTerminalData key) {
+  GhosttyString str{};
+  if (ghostty_terminal_get(session->term, key, &str) != GHOSTTY_SUCCESS || str.len == 0) {
+    return nullptr;
+  }
+  jbyteArray out = env->NewByteArray(static_cast<jsize>(str.len));
+  if (out == nullptr) return nullptr;
+  env->SetByteArrayRegion(out, 0, static_cast<jsize>(str.len),
+                          reinterpret_cast<const jbyte*>(str.ptr));
+  return out;
 }
 
 Session* fromHandle(jlong handle) {
@@ -252,6 +287,12 @@ Java_expo_modules_libghostty_GhosttyVt_nativeCreate(
   ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_USERDATA, session);
   ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
                        reinterpret_cast<const void*>(&writePtyCallback));
+  ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_BELL,
+                       reinterpret_cast<const void*>(&bellCallback));
+  ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED,
+                       reinterpret_cast<const void*>(&titleChangedCallback));
+  ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_PWD_CHANGED,
+                       reinterpret_cast<const void*>(&pwdChangedCallback));
 
   GhosttyColorRgb bg{0x00, 0x00, 0x00};
   GhosttyColorRgb fg{0xFF, 0xFF, 0xFF};
@@ -293,6 +334,32 @@ Java_expo_modules_libghostty_GhosttyVt_nativeWrite(
   env->SetByteArrayRegion(out, 0, outLen,
                           reinterpret_cast<const jbyte*>(session->ptyOut.data()));
   return out;
+}
+
+JNIEXPORT jint JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeTakeEventFlags(
+    JNIEnv*, jobject, jlong handle) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return 0;
+  const jint flags = session->pendingEvents;
+  session->pendingEvents = 0;
+  return flags;
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeGetTitle(
+    JNIEnv* env, jobject, jlong handle) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return nullptr;
+  return stringData(env, session, GHOSTTY_TERMINAL_DATA_TITLE);
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeGetPwd(
+    JNIEnv* env, jobject, jlong handle) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return nullptr;
+  return stringData(env, session, GHOSTTY_TERMINAL_DATA_PWD);
 }
 
 JNIEXPORT void JNICALL

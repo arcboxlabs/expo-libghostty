@@ -48,6 +48,9 @@ import kotlin.math.roundToInt
 internal class GhosttyTerminalView(context: Context) : View(context) {
   var onInputBytes: ((ByteArray) -> Unit)? = null
   var onGridResize: ((cols: Int, rows: Int) -> Unit)? = null
+  var onBell: (() -> Unit)? = null
+  var onTitleChange: ((title: String) -> Unit)? = null
+  var onDirectoryChange: ((path: String) -> Unit)? = null
 
   /** Sticky-modifier source for accessory-bar keys and IME text (optional). */
   var accessoryBar: TerminalAccessoryBar? = null
@@ -344,8 +347,21 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     if (response != null && response.isNotEmpty() && !finished) {
       onInputBytes?.invoke(response)
     }
+    drainTerminalEvents()
     holdBlinkSolid()
     scheduleFrame()
+  }
+
+  private fun drainTerminalEvents() {
+    val flags = GhosttyVt.nativeTakeEventFlags(handle)
+    if (flags == 0) return
+    if (flags and GhosttyVt.EVENT_BELL != 0) onBell?.invoke()
+    if (flags and GhosttyVt.EVENT_TITLE != 0) {
+      onTitleChange?.invoke(GhosttyVt.nativeGetTitle(handle)?.toString(Charsets.UTF_8).orEmpty())
+    }
+    if (flags and GhosttyVt.EVENT_PWD != 0) {
+      onDirectoryChange?.invoke(GhosttyVt.nativeGetPwd(handle)?.toString(Charsets.UTF_8).orEmpty())
+    }
   }
 
   /** Mark the underlying PTY as exited: stop forwarding input. */

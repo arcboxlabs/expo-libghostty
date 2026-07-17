@@ -19,6 +19,9 @@ class ExpoLibghosttyView(context: Context, appContext: AppContext) :
 
   private val onInput by EventDispatcher<Map<String, Any>>()
   private val onResize by EventDispatcher<Map<String, Any>>()
+  private val onBell by EventDispatcher<Map<String, Any>>()
+  private val onTitleChange by EventDispatcher<Map<String, Any>>()
+  private val onDirectoryChange by EventDispatcher<Map<String, Any>>()
 
   private val terminal = GhosttyTerminalView(context).also { view ->
     view.onInputBytes = { bytes ->
@@ -32,6 +35,9 @@ class ExpoLibghosttyView(context: Context, appContext: AppContext) :
     view.onGridResize = { cols, rows ->
       onResize(mapOf("cols" to cols, "rows" to rows))
     }
+    view.onBell = { onBell(emptyMap()) }
+    view.onTitleChange = { title -> onTitleChange(mapOf("title" to title)) }
+    view.onDirectoryChange = { path -> onDirectoryChange(mapOf("path" to path)) }
   }
 
   private val accessoryBar = TerminalAccessoryBar(context).also { bar ->

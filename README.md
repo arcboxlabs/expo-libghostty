@@ -79,6 +79,9 @@ export function Terminal({ pty }) {
 | `theme`               | Terminal colors: `background`, `foreground`, `cursorColor`, `selectionBackground`, `selectionForeground`, and `palette` (overrides by index, 0–255). Values use ghostty config syntax (hex or X11 names); invalid values are ignored with a warning. Android applies the theme per view; on iOS it is app-wide. |
 | `onInput`             | User keyboard/IME input to forward to the PTY. `nativeEvent.data` is base64 bytes; `nativeEvent.text` is the same decoded as UTF-8. |
 | `onResize`            | Grid resized (layout, rotation, font change). Forward `nativeEvent.cols` / `nativeEvent.rows` to the PTY.                           |
+| `onBell`              | BEL received (0x07).                                                                                                                |
+| `onTitleChange`       | Title set via OSC 0/2; `nativeEvent.title`.                                                                                          |
+| `onDirectoryChange`   | Working directory reported via OSC 7/9/1337; `nativeEvent.path` is passed through as sent (OSC 7 is a `file://` URI). Android only for now — the upstream iOS in-memory surface does not emit pwd actions. |
 | `ref`                 | Imperative handle (`TerminalViewRef`), methods below.                                                                               |
 
 | Ref method         | Description                                            |
@@ -105,6 +108,8 @@ where the platforms do:
 | Cursor blink (DECSCUSR)           | ✅                        | ✅ (holds solid on I/O, honors animations-off)  |
 | Pinch-to-zoom font size           | ✅                        | ✅ (same 0.1-scale → ±1 steps, 4–64 bounds)     |
 | Theme colors (`theme` prop)       | ✅ app-wide (controller config) | ✅ per view (terminal default colors)     |
+| Terminal events (bell/title)      | ✅ (surface delegate)     | ✅ (vt effect callbacks)                        |
+| `onDirectoryChange` (OSC 7/9/1337)| ❌ (surface emits no pwd actions) | ✅                                      |
 
 ## Vendoring
 

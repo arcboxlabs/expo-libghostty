@@ -6,6 +6,11 @@
 
 ### 🎉 New features
 
+- Terminal effect events: `onBell` (BEL) and `onTitleChange` (OSC 0/2) on
+  both platforms, plus `onDirectoryChange` (OSC 7/9/1337, value passed
+  through as sent) on Android — the upstream iOS in-memory surface does not
+  emit pwd actions yet. iOS routes the surface delegate; Android registers
+  libghostty-vt effect callbacks and drains them after each write.
 - Baseline screen-reader support. Android: the terminal announces as
   "Terminal" (overridable via `accessibilityLabel`), accessory keys expose
   names ("Escape", "Control", …) with a button role, sticky modifiers report

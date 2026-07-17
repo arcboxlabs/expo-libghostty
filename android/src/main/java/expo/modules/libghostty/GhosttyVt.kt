@@ -13,6 +13,11 @@ internal object GhosttyVt {
     System.loadLibrary("expolibghostty")
   }
 
+  // Event flags returned by nativeTakeEventFlags; mirror ghostty_jni.cpp.
+  const val EVENT_BELL = 1
+  const val EVENT_TITLE = 1 shl 1
+  const val EVENT_PWD = 1 shl 2
+
   /** Create a terminal session. Returns 0 on failure. */
   external fun nativeCreate(cols: Int, rows: Int, maxScrollback: Long): Long
 
@@ -25,6 +30,15 @@ internal object GhosttyVt {
   external fun nativeWrite(handle: Long, data: ByteArray): ByteArray?
 
   external fun nativeResize(handle: Long, cols: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int)
+
+  /** EVENT_* flags for effects observed since the last call; clears on read. */
+  external fun nativeTakeEventFlags(handle: Long): Int
+
+  /** Terminal title set via OSC 0/2 as UTF-8, or null when unset. */
+  external fun nativeGetTitle(handle: Long): ByteArray?
+
+  /** Working directory set via OSC 7/9/1337 as UTF-8, or null when unset. */
+  external fun nativeGetPwd(handle: Long): ByteArray?
 
   /**
    * Set the terminal's default colors. Colors use ghostty config syntax

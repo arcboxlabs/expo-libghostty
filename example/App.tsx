@@ -14,6 +14,10 @@ export default function App() {
 
   useEffect(() => {
     terminal.current?.write(BANNER);
+    // Exercise the effect events: OSC 2 title, OSC 1337 pwd, BEL.
+    terminal.current?.writeText(
+      '\x1B]2;expo-libghostty demo\x07\x1B]1337;CurrentDir=/tmp\x07\x07'
+    );
   }, []);
 
   return (
@@ -27,6 +31,9 @@ export default function App() {
         onResize={({ nativeEvent }) => {
           console.log(`resize: ${nativeEvent.cols}x${nativeEvent.rows}`);
         }}
+        onBell={() => console.log('bell')}
+        onTitleChange={({ nativeEvent }) => console.log(`title: ${nativeEvent.title}`)}
+        onDirectoryChange={({ nativeEvent }) => console.log(`pwd: ${nativeEvent.path}`)}
       />
     </View>
   );

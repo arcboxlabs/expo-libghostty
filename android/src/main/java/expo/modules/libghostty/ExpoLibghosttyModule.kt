@@ -12,7 +12,7 @@ class ExpoLibghosttyModule : Module() {
     Name("ExpoLibghostty")
 
     View(ExpoLibghosttyView::class) {
-      Events("onInput", "onResize")
+      Events("onInput", "onResize", "onBell", "onTitleChange", "onDirectoryChange")
 
       // Base font size in dp (default 14); applied live, the grid reflows.
       Prop("fontSize") { view: ExpoLibghosttyView, size: Float ->

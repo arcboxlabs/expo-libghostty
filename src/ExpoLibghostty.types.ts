@@ -14,6 +14,20 @@ export type TerminalResizeEvent = {
   rows: number;
 };
 
+export type TerminalTitleEvent = {
+  /** Title set by the running program via OSC 0/2. */
+  title: string;
+};
+
+export type TerminalDirectoryEvent = {
+  /**
+   * Working directory reported via OSC 7 / OSC 9;9 / OSC 1337 CurrentDir,
+   * passed through as sent — OSC 7 delivers a `file://` URI, the others a
+   * bare path.
+   */
+  path: string;
+};
+
 export type TerminalViewRef = {
   /** Feed base64-encoded PTY output into the terminal grid. */
   write(base64: string): Promise<void>;
@@ -61,6 +75,15 @@ export type TerminalViewProps = {
   onInput?: (event: { nativeEvent: TerminalInputEvent }) => void;
   /** Grid resized (layout, rotation, font change); forward to the PTY. */
   onResize?: (event: { nativeEvent: TerminalResizeEvent }) => void;
+  /** BEL received (0x07). */
+  onBell?: (event: { nativeEvent: object }) => void;
+  /** Terminal title changed via OSC 0/2. */
+  onTitleChange?: (event: { nativeEvent: TerminalTitleEvent }) => void;
+  /**
+   * Working directory changed via OSC 7/9/1337. Android only for now: the
+   * upstream iOS in-memory surface does not emit pwd actions.
+   */
+  onDirectoryChange?: (event: { nativeEvent: TerminalDirectoryEvent }) => void;
   ref?: Ref<TerminalViewRef>;
   style?: StyleProp<ViewStyle>;
 };

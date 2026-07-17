@@ -44,6 +44,9 @@ class ExpoLibghosttyView: ExpoView {
 
   let onInput = EventDispatcher()
   let onResize = EventDispatcher()
+  let onBell = EventDispatcher()
+  let onTitleChange = EventDispatcher()
+  let onDirectoryChange = EventDispatcher()
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -71,6 +74,7 @@ class ExpoLibghosttyView: ExpoView {
     terminalView.isAccessibilityElement = true
     terminalView.accessibilityLabel = "Terminal"
     terminalView.accessibilityTraits = [.allowsDirectInteraction]
+    terminalView.delegate = self
     addSubview(terminalView)
   }
 
@@ -87,5 +91,21 @@ class ExpoLibghosttyView: ExpoView {
   /// Mark the underlying PTY as exited (terminal.exit on the wire).
   func finish(exitCode: UInt32) {
     session?.finish(exitCode: exitCode, runtimeMilliseconds: 0)
+  }
+}
+
+// Terminal effects (OSC escapes) surfaced as component events.
+extension ExpoLibghosttyView: TerminalSurfaceBellDelegate, TerminalSurfaceTitleDelegate,
+  TerminalSurfacePwdDelegate {
+  func terminalDidRingBell() {
+    onBell([:])
+  }
+
+  func terminalDidChangeTitle(_ title: String) {
+    onTitleChange(["title": title])
+  }
+
+  func terminalDidChangeWorkingDirectory(_ path: String) {
+    onDirectoryChange(["path": path])
   }
 }
