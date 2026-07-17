@@ -15,6 +15,10 @@
   snapshot wire format, cell color resolution, and the sticky-modifier state
   machine (extracted into `SnapshotFormat.kt` / `StickyModifier.kt`). Both
   run in CI.
+- iOS vendor bump: libghostty-spm 1.2.11 → 1.3.1 (GhosttyKit rebuilt from a
+  newer ghostty, scroll-remainder fix; `TerminalSurfaceOptions` gains an
+  additive `envVars` option for exec backends — unused by this module's
+  in-memory backend).
 
 ## 0.8.1 — 2026-07-17
 

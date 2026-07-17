@@ -3,7 +3,7 @@
 # scripts/download-xcframework.mjs fetches (checksum-pinned) at install time.
 Pod::Spec.new do |s|
   s.name    = 'GhosttyKit'
-  s.version = '1.2.11'
+  s.version = '1.3.1'
   s.summary = "Ghostty's libghostty C API for Apple platforms (vendored by expo-libghostty)."
   s.author  = { 'Lakr233' => 'https://github.com/Lakr233' }
   s.homepage = 'https://github.com/Lakr233/libghostty-spm'
