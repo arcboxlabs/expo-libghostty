@@ -17,4 +17,5 @@ Pod::Spec.new do |s|
   s.source_files = 'vendor/GhosttyKit/**/*.swift'
   s.vendored_frameworks = 'vendor/Frameworks/GhosttyKit.xcframework'
   s.libraries = 'c++'
+  s.resource_bundles = { 'GhosttyKit_privacy' => 'privacy/GhosttyKit/PrivacyInfo.xcprivacy' }
 end

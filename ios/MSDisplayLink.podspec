@@ -14,4 +14,5 @@ Pod::Spec.new do |s|
   s.swift_version = '6.0'
 
   s.source_files = 'vendor/MSDisplayLink/**/*.swift'
+  s.resource_bundles = { 'MSDisplayLink_privacy' => 'privacy/MSDisplayLink/PrivacyInfo.xcprivacy' }
 end

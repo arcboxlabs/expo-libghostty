@@ -17,4 +17,5 @@ Pod::Spec.new do |s|
   s.dependency 'MSDisplayLink'
 
   s.source_files = 'vendor/GhosttyTerminal/**/*.swift'
+  s.resource_bundles = { 'GhosttyTerminal_privacy' => 'privacy/GhosttyTerminal/PrivacyInfo.xcprivacy' }
 end
