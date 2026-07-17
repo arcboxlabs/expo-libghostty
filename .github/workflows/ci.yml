@@ -62,7 +62,9 @@ jobs:
           -Pandroid.enableShrinkResourcesInReleaseBuilds=true
 
   ios:
-    runs-on: macos-15
+    # Expo SDK 57's expo-modules-jsi is a swift-tools-version 6.2 package,
+    # which needs the Xcode 26 toolchain.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
 
