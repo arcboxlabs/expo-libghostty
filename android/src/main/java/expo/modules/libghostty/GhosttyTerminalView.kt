@@ -413,6 +413,12 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     if (bytes.isNotEmpty()) sendBytes(bytes)
   }
 
+  /** Send accessory-bar symbol text (sticky modifiers compose as for IME text). */
+  fun sendAccessoryText(text: CharSequence) = sendText(text)
+
+  /** Paste the clipboard, same confirmation flow as the selection menu. */
+  fun requestPaste() = pasteFromClipboard()
+
   private fun charToKeyCode(char: Char): Int {
     val lower = char.lowercaseChar()
     return when (lower) {

@@ -36,6 +36,8 @@ class ExpoLibghosttyView(context: Context, appContext: AppContext) :
 
   private val accessoryBar = TerminalAccessoryBar(context).also { bar ->
     bar.onKey = { keyCode -> terminal.sendAccessoryKey(keyCode) }
+    bar.onText = { text -> terminal.sendAccessoryText(text) }
+    bar.onPaste = { terminal.requestPaste() }
     bar.visibility = GONE
   }
 
