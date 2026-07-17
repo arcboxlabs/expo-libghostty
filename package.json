@@ -32,15 +32,15 @@
   "homepage": "https://github.com/arcboxlabs/expo-libghostty#readme",
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "eslint": "~9.39.4",
-    "eslint-config-universe": "^15.0.3",
+    "eslint": "~10.7.0",
+    "eslint-config-universe": "^16.0.0",
     "expo": "^57.0.5",
     "jsdom": "^29.1.1",
     "prettier": "^3.0.0",
     "react": "^19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.0",
-    "typescript": "^5.9.2",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
