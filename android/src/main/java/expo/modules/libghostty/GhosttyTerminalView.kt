@@ -505,23 +505,19 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     }
 
     buf.position(0)
-    buf.int // version
-    val dirtyKind = buf.int
-    val snapCols = buf.int
-    buf.int // rows
-    defaultBg = buf.int
-    defaultFg = buf.int
-    cursorX = buf.int
-    cursorY = buf.int
-    cursorStyle = buf.int
-    cursorVisible = buf.int != 0
-    buf.int // row count (== rowCount)
-    cursorBlinks = buf.int != 0
-    cursorColor = buf.int
+    val header = SnapshotHeader.read(buf)
+    defaultBg = header.background
+    defaultFg = header.foreground
+    cursorX = header.cursorX
+    cursorY = header.cursorY
+    cursorStyle = header.cursorStyle
+    cursorVisible = header.cursorVisible
+    cursorBlinks = header.cursorBlinks
+    cursorColor = header.cursorColor
     syncBlinkTimer()
 
-    if (dirtyKind == DIRTY_FULL) canvas.drawColor(defaultBg)
-    repeat(rowCount) { drawRowRecord(buf, canvas, snapCols) }
+    if (header.dirtyKind == DIRTY_FULL) canvas.drawColor(defaultBg)
+    repeat(rowCount) { drawRowRecord(buf, canvas, header.cols) }
     syncSelectionUi()
     invalidate()
   }
@@ -809,27 +805,9 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
         rowSelEndWide[rowIndex] = true
       }
       val selected = selStart >= 0 && col >= selStart && col <= selEnd
-      var effFg = if (flags and FLAG_FG_DEFAULT != 0) defaultFg else fg
-      var effBg = if (flags and FLAG_BG_NONE != 0) defaultBg else bg
-      if (flags and FLAG_INVERSE != 0) {
-        val tmp = effFg
-        effFg = effBg
-        effBg = tmp
-      }
-      if (selected) {
-        val themedBg = selectionBg
-        if (themedBg != null) {
-          effBg = themedBg
-          selectionFg?.let { effFg = it }
-        } else {
-          // No themed selection colors: classic fg/bg swap.
-          val tmp = effFg
-          effFg = effBg
-          effBg = tmp
-        }
-      }
-      cellFg[col] = effFg
-      cellBg[col] = effBg
+      val colors = resolveCellColors(fg, bg, flags, selected, defaultFg, defaultBg, selectionFg, selectionBg)
+      cellFg[col] = packedFg(colors)
+      cellBg[col] = packedBg(colors)
       cellTextOff[col] = textOff
       cellTextLen[col] = textLen
       cellFlags[col] = flags
@@ -1130,28 +1108,5 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     const val JUMP_CHIP_BACKGROUND = 0xCC2A2A2E.toInt()
     const val JUMP_CHIP_ARROW_COLOR = 0xFFE0E0E0.toInt()
 
-    const val HEADER_BYTES = 52
-    const val ROW_HEADER_BYTES = 16
-    const val CELL_RECORD_BYTES = 16
-    const val MAX_CELL_TEXT_UNITS = 32
-
-    const val DIRTY_FULL = 2
-
-    const val CURSOR_STYLE_BAR = 0
-    const val CURSOR_STYLE_BLOCK = 1
-    const val CURSOR_STYLE_UNDERLINE = 2
-    const val CURSOR_STYLE_BLOCK_HOLLOW = 3
-
-    const val FLAG_BOLD = 1 shl 0
-    const val FLAG_ITALIC = 1 shl 1
-    const val FLAG_FAINT = 1 shl 2
-    const val FLAG_UNDERLINE = 1 shl 3
-    const val FLAG_STRIKETHROUGH = 1 shl 4
-    const val FLAG_INVERSE = 1 shl 5
-    const val FLAG_INVISIBLE = 1 shl 6
-    const val FLAG_WIDE = 1 shl 7
-    const val FLAG_SPACER = 1 shl 8
-    const val FLAG_FG_DEFAULT = 1 shl 9
-    const val FLAG_BG_NONE = 1 shl 10
   }
 }

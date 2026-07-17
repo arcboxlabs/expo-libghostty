@@ -27,18 +27,14 @@ internal class TerminalAccessoryBar(context: Context) : HorizontalScrollView(con
   var onText: ((text: String) -> Unit)? = null
   var onPaste: (() -> Unit)? = null
 
-  private enum class Activation { INACTIVE, ARMED, LOCKED }
-
   private val row = LinearLayout(context).apply {
     orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.CENTER_VERTICAL
     val edge = dp(EDGE_PADDING_DP)
     setPadding(edge, 0, edge, 0)
   }
-  private var ctrl = Activation.INACTIVE
-  private var alt = Activation.INACTIVE
-  private var lastCtrlTap = 0L
-  private var lastAltTap = 0L
+  private val ctrl = StickyModifier(SystemClock::uptimeMillis)
+  private val alt = StickyModifier(SystemClock::uptimeMillis)
   private lateinit var ctrlButton: KeyButton
   private lateinit var altButton: KeyButton
 
@@ -50,8 +46,8 @@ internal class TerminalAccessoryBar(context: Context) : HorizontalScrollView(con
 
     addKey("⎋") { onKey?.invoke(KeyEvent.KEYCODE_ESCAPE) }
     addKey("⇥") { onKey?.invoke(KeyEvent.KEYCODE_TAB) }
-    ctrlButton = addKey("⌃") { toggleCtrl() }
-    altButton = addKey("⌥") { toggleAlt() }
+    ctrlButton = addKey("⌃") { toggle(ctrl) }
+    altButton = addKey("⌥") { toggle(alt) }
     addDivider()
     addKey("◀") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_LEFT) }
     addKey("▲") { onKey?.invoke(KeyEvent.KEYCODE_DPAD_UP) }
@@ -67,41 +63,26 @@ internal class TerminalAccessoryBar(context: Context) : HorizontalScrollView(con
   /** KeyEvent meta bits for the currently lit sticky modifiers. */
   fun stickyMetaState(): Int {
     var meta = 0
-    if (ctrl != Activation.INACTIVE) meta = meta or KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
-    if (alt != Activation.INACTIVE) meta = meta or KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+    if (ctrl.engaged) meta = meta or KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
+    if (alt.engaged) meta = meta or KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
     return meta
   }
 
   /** A key consumed the modifiers: armed ones unlatch, locked ones persist. */
   fun consumeSticky() {
-    if (ctrl == Activation.ARMED) ctrl = Activation.INACTIVE
-    if (alt == Activation.ARMED) alt = Activation.INACTIVE
+    ctrl.consume()
+    alt.consume()
     syncModifierVisuals()
   }
 
-  private fun toggleCtrl() {
-    ctrl = nextActivation(ctrl, lastCtrlTap)
-    lastCtrlTap = SystemClock.uptimeMillis()
+  private fun toggle(modifier: StickyModifier) {
+    modifier.tap()
     syncModifierVisuals()
-  }
-
-  private fun toggleAlt() {
-    alt = nextActivation(alt, lastAltTap)
-    lastAltTap = SystemClock.uptimeMillis()
-    syncModifierVisuals()
-  }
-
-  private fun nextActivation(current: Activation, lastTap: Long): Activation = when (current) {
-    Activation.INACTIVE -> Activation.ARMED
-    Activation.ARMED ->
-      if (SystemClock.uptimeMillis() - lastTap < DOUBLE_TAP_MS) Activation.LOCKED
-      else Activation.INACTIVE
-    Activation.LOCKED -> Activation.INACTIVE
   }
 
   private fun syncModifierVisuals() {
-    ctrlButton.setActivation(ctrl != Activation.INACTIVE, ctrl == Activation.LOCKED)
-    altButton.setActivation(alt != Activation.INACTIVE, alt == Activation.LOCKED)
+    ctrlButton.setActivation(ctrl.engaged, ctrl.locked)
+    altButton.setActivation(alt.engaged, alt.locked)
   }
 
   private fun addKey(label: String, onTap: () -> Unit): KeyButton {
@@ -179,7 +160,6 @@ internal class TerminalAccessoryBar(context: Context) : HorizontalScrollView(con
     const val ITEM_SPACING_DP = 8f
     const val EDGE_PADDING_DP = 10f
     const val DIVIDER_SIZE_DP = 6f
-    const val DOUBLE_TAP_MS = 300L
     const val KEY_TEXT_SIZE_SP = 15f
 
     const val BAR_BACKGROUND = 0xF21C1C1E.toInt()
