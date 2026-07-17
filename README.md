@@ -1,5 +1,10 @@
 # expo-libghostty
 
+[![npm](https://img.shields.io/npm/v/expo-libghostty)](https://www.npmjs.com/package/expo-libghostty)
+[![Release](https://github.com/arcboxlabs/expo-libghostty/actions/workflows/release.yml/badge.svg)](https://github.com/arcboxlabs/expo-libghostty/actions/workflows/release.yml)
+[![license](https://img.shields.io/npm/l/expo-libghostty)](./LICENSE)
+![platforms](https://img.shields.io/badge/platforms-iOS%2016.4%2B%20%7C%20Android-4630EB)
+
 Ghostty terminal view for Expo / React Native, powered by
 [libghostty](https://ghostty.org) — on iOS via
 [Lakr233/libghostty-spm](https://github.com/Lakr233/libghostty-spm), on
@@ -11,7 +16,7 @@ Canvas renderer.
   modifiers, touch selection, pinch-to-zoom font size
 - Android: libghostty-vt state machine + JNI, dirty-row Canvas rendering
   (system font fallback covers CJK/emoji), IME text input, hardware keys via
-  ghostty's key encoder, scrollback gestures
+  ghostty's key encoder, scrollback gestures, touch selection and clipboard
 - Bring-your-own PTY: the view only renders bytes and reports input/resizes —
   transport and session lifecycle stay on your side
 
@@ -62,6 +67,20 @@ export function Terminal({ pty }) {
 `example/` contains a runnable local-echo demo (`pnpm --dir example ios` /
 `pnpm --dir example android`).
 
+### API
+
+| `<TerminalView>` prop | Description                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `onInput`             | User keyboard/IME input to forward to the PTY. `nativeEvent.data` is base64 bytes; `nativeEvent.text` is the same decoded as UTF-8. |
+| `onResize`            | Grid resized (layout, rotation, font change). Forward `nativeEvent.cols` / `nativeEvent.rows` to the PTY.                           |
+| `ref`                 | Imperative handle (`TerminalViewRef`), methods below.                                                                               |
+
+| Ref method         | Description                                            |
+| ------------------ | ------------------------------------------------------ |
+| `write(base64)`    | Feed base64-encoded PTY output into the terminal grid. |
+| `writeText(text)`  | Feed PTY output as UTF-8 text, for string-based wires. |
+| `finish(exitCode)` | Mark the underlying PTY as exited.                     |
+
 ## Vendoring
 
 Expo autolinking cannot consume Swift packages, so the pure-Swift layers of
@@ -78,3 +97,9 @@ commit (Zig 0.15.2 + NDK r27); `vendor-manifest.json` pins the tarball
 checksum. A thin JNI shim (`android/src/main/cpp/ghostty_jni.cpp`) exposes
 the terminal + render-state loop to Kotlin, which paints the grid with
 Canvas/Skia (`GhosttyTerminalView.kt`).
+
+## License
+
+MIT © [ArcBox, Inc.](./LICENSE) Vendored components (libghostty,
+libghostty-spm, MSDisplayLink) are MIT-licensed by their respective authors;
+their licenses ship alongside the vendored sources.
