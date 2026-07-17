@@ -57,7 +57,7 @@ fi
 
 title="Vendor drift: upstream pins are behind"
 body=$(cat <<EOF
-Weekly vendor watch found pins behind their upstreams.
+The daily vendor watch found pins behind their upstreams.
 
 | Component | Pinned | Latest | Bump path |
 | --- | --- | --- | --- |
