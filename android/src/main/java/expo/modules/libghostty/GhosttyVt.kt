@@ -26,6 +26,23 @@ internal object GhosttyVt {
 
   external fun nativeResize(handle: Long, cols: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int)
 
+  /**
+   * Set the terminal's default colors. Colors use ghostty config syntax
+   * (hex with or without '#', X11 names); null clears back to the built-in
+   * default, invalid strings are logged and skipped. [palette] overrides
+   * entries by index on top of ghostty's default 256-color palette.
+   */
+  external fun nativeSetTheme(
+    handle: Long,
+    foreground: String?,
+    background: String?,
+    cursor: String?,
+    palette: Array<String?>?
+  )
+
+  /** Parse a ghostty-syntax color to ARGB, or 0 when invalid. */
+  external fun nativeParseColor(color: String): Int
+
   /** Scroll the viewport by [deltaRows]; negative is up (into scrollback). */
   external fun nativeScroll(handle: Long, deltaRows: Int)
 

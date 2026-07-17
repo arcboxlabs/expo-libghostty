@@ -115,6 +115,11 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
   private var defaultBg = 0xFF000000.toInt()
   private var defaultFg = 0xFFFFFFFF.toInt()
+  // Themed selection colors; when unset, selected cells keep the classic
+  // fg/bg swap. Cursor color rides the snapshot header (0 = unconfigured).
+  private var selectionBg: Int? = null
+  private var selectionFg: Int? = null
+  private var cursorColor = 0
   private var cursorX = -1
   private var cursorY = -1
   private var cursorStyle = CURSOR_STYLE_BLOCK
@@ -303,6 +308,31 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     updateGridGeometry(force = true)
   }
 
+  /**
+   * Apply theme colors. Foreground/background/cursor/palette go into the
+   * terminal itself (so OSC 4/10/11/12 queries and resets stay truthful);
+   * selection colors are a renderer concern and stay here. Null fields
+   * clear back to the defaults.
+   */
+  fun setTheme(
+    foreground: String?,
+    background: String?,
+    cursorColor: String?,
+    selectionBackground: String?,
+    selectionForeground: String?,
+    palette: Array<String?>?
+  ) {
+    if (handle == 0L) return
+    selectionBg = selectionBackground
+      ?.let { GhosttyVt.nativeParseColor(it) }
+      ?.takeIf { it != 0 }
+    selectionFg = selectionForeground
+      ?.let { GhosttyVt.nativeParseColor(it) }
+      ?.takeIf { it != 0 }
+    GhosttyVt.nativeSetTheme(handle, foreground, background, cursorColor, palette)
+    scheduleFrame()
+  }
+
   // ── Session I/O ──
 
   /** Feed PTY output into the grid. */
@@ -481,6 +511,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     cursorVisible = buf.int != 0
     buf.int // row count (== rowCount)
     cursorBlinks = buf.int != 0
+    cursorColor = buf.int
     syncBlinkTimer()
 
     if (dirtyKind == DIRTY_FULL) canvas.drawColor(defaultBg)
@@ -772,13 +803,24 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
         rowSelEndWide[rowIndex] = true
       }
       val selected = selStart >= 0 && col >= selStart && col <= selEnd
-      val swap = (flags and FLAG_INVERSE != 0) != selected
       var effFg = if (flags and FLAG_FG_DEFAULT != 0) defaultFg else fg
       var effBg = if (flags and FLAG_BG_NONE != 0) defaultBg else bg
-      if (swap) {
+      if (flags and FLAG_INVERSE != 0) {
         val tmp = effFg
         effFg = effBg
         effBg = tmp
+      }
+      if (selected) {
+        val themedBg = selectionBg
+        if (themedBg != null) {
+          effBg = themedBg
+          selectionFg?.let { effFg = it }
+        } else {
+          // No themed selection colors: classic fg/bg swap.
+          val tmp = effFg
+          effFg = effBg
+          effBg = tmp
+        }
       }
       cellFg[col] = effFg
       cellBg[col] = effBg
@@ -898,7 +940,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     val x = cursorX * cellWidth
     val top = (cursorY * cellHeight).toFloat()
     val bottom = top + cellHeight
-    cursorPaint.color = defaultFg
+    cursorPaint.color = if (cursorColor != 0) cursorColor else defaultFg
     when (cursorStyle) {
       CURSOR_STYLE_BAR -> {
         cursorPaint.style = Paint.Style.FILL
@@ -1082,7 +1124,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     const val JUMP_CHIP_BACKGROUND = 0xCC2A2A2E.toInt()
     const val JUMP_CHIP_ARROW_COLOR = 0xFFE0E0E0.toInt()
 
-    const val HEADER_BYTES = 48
+    const val HEADER_BYTES = 52
     const val ROW_HEADER_BYTES = 16
     const val CELL_RECORD_BYTES = 16
     const val MAX_CELL_TEXT_UNITS = 32

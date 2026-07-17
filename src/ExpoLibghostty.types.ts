@@ -23,6 +23,26 @@ export type TerminalViewRef = {
   finish(exitCode: number): Promise<void>;
 };
 
+export type TerminalTheme = {
+  /**
+   * Colors accept ghostty config syntax: 3/6-digit hex (with or without a
+   * leading `#`) or X11 color names. Invalid values are ignored with a
+   * native warning, matching ghostty's handling of bad config values.
+   */
+  background?: string;
+  foreground?: string;
+  cursorColor?: string;
+  /** When unset, selected cells render with the classic fg/bg swap. */
+  selectionBackground?: string;
+  selectionForeground?: string;
+  /**
+   * Palette overrides by index (0–255) on top of ghostty's default
+   * 256-color palette — pass the first 16 entries to retheme the ANSI
+   * colors. Sparse entries (undefined/null) keep the default.
+   */
+  palette?: (string | null)[];
+};
+
 export type TerminalViewProps = {
   /**
    * Base font size in density-independent units (default 14, clamped to
@@ -31,6 +51,12 @@ export type TerminalViewProps = {
    * the terminal surface, resetting the grid — set it before mounting.
    */
   fontSize?: number;
+  /**
+   * Theme colors. Android applies them per view; on iOS the theme is
+   * app-wide (all terminal views share the controller's config). Omit or
+   * pass undefined fields to keep ghostty's defaults.
+   */
+  theme?: TerminalTheme;
   /** User keyboard/IME input to forward to the PTY. */
   onInput?: (event: { nativeEvent: TerminalInputEvent }) => void;
   /** Grid resized (layout, rotation, font change); forward to the PTY. */

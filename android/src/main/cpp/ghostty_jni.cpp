@@ -9,13 +9,14 @@
 // per-cell JNI calls. See GhosttyTerminalView.kt for the reader side.
 //
 // Buffer layout:
-//   header: 12 x i32
-//     [0] version (1)          [1] dirty kind (0 none / 1 partial / 2 full)
+//   header: 13 x i32
+//     [0] version (2)          [1] dirty kind (0 none / 1 partial / 2 full)
 //     [2] cols                 [3] rows
 //     [4] default bg (ARGB)    [5] default fg (ARGB)
 //     [6] cursor x or -1       [7] cursor y or -1
 //     [8] cursor style         [9] cursor visible (0/1)
 //     [10] row record count    [11] cursor blinking (0/1)
+//     [12] cursor color (ARGB) or 0 when unconfigured
 //   row record:
 //     i32 rowIndex, i32 selStartX or -1, i32 selEndX or -1, i32 textUnits
 //     cells[cols] x 16 bytes:
@@ -52,7 +53,7 @@ constexpr uint16_t kFlagSpacer = 1 << 8;
 constexpr uint16_t kFlagFgDefault = 1 << 9;
 constexpr uint16_t kFlagBgNone = 1 << 10;
 
-constexpr size_t kHeaderBytes = 12 * sizeof(int32_t);
+constexpr size_t kHeaderBytes = 13 * sizeof(int32_t);
 constexpr size_t kRowHeaderBytes = 4 * sizeof(int32_t);
 constexpr size_t kCellRecordBytes = 16;
 // Cap per-cell grapheme text; anything longer is truncated (degenerate input).
@@ -106,6 +107,20 @@ bool installSelection(Session* session, const GhosttySelection* selection) {
 int32_t argb(GhosttyColorRgb color) {
   return static_cast<int32_t>(0xFF000000u | (static_cast<uint32_t>(color.r) << 16) |
                               (static_cast<uint32_t>(color.g) << 8) | color.b);
+}
+
+// Parses a color in ghostty config syntax (hex with or without '#', X11
+// names, rgb:/rgbi: forms). Returns false on null or invalid input.
+bool parseColor(JNIEnv* env, jstring str, GhosttyColorRgb* out) {
+  if (str == nullptr) return false;
+  const char* utf = env->GetStringUTFChars(str, nullptr);
+  if (utf == nullptr) return false;
+  const bool ok = ghostty_color_parse(utf, strlen(utf), out) == GHOSTTY_SUCCESS;
+  if (!ok) {
+    __android_log_print(ANDROID_LOG_WARN, kLogTag, "ignoring invalid theme color: %s", utf);
+  }
+  env->ReleaseStringUTFChars(str, utf);
+  return ok;
 }
 
 void destroySession(Session* session) {
@@ -294,6 +309,54 @@ Java_expo_modules_libghostty_GhosttyVt_nativeResize(
   markRenderDirtyFull(session);
 }
 
+// Sets the terminal's default colors (theme). Null arguments clear back to
+// the built-in defaults; invalid color strings are logged and skipped, like
+// ghostty does for bad config values. The palette array overrides entries
+// by index on top of ghostty's default 256-color palette; per-index OSC 4
+// overrides set by the running program are preserved by the terminal.
+JNIEXPORT void JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeSetTheme(
+    JNIEnv* env, jobject, jlong handle, jstring foreground, jstring background,
+    jstring cursor, jobjectArray palette) {
+  auto* session = fromHandle(handle);
+  if (session == nullptr) return;
+
+  GhosttyColorRgb rgb{};
+  ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND,
+                       parseColor(env, foreground, &rgb) ? &rgb : nullptr);
+  ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND,
+                       parseColor(env, background, &rgb) ? &rgb : nullptr);
+  ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_COLOR_CURSOR,
+                       parseColor(env, cursor, &rgb) ? &rgb : nullptr);
+
+  if (palette == nullptr) {
+    ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, nullptr);
+  } else {
+    GhosttyColorRgb table[256];
+    ghostty_color_palette_default(table);
+    jsize count = env->GetArrayLength(palette);
+    if (count > 256) count = 256;
+    for (jsize i = 0; i < count; i++) {
+      auto entry = static_cast<jstring>(env->GetObjectArrayElement(palette, i));
+      GhosttyColorRgb parsed{};
+      if (parseColor(env, entry, &parsed)) table[i] = parsed;
+      if (entry != nullptr) env->DeleteLocalRef(entry);
+    }
+    ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, table);
+  }
+
+  markRenderDirtyFull(session);
+}
+
+// Parses a color in ghostty config syntax to ARGB, or 0 when invalid (real
+// colors always carry 0xFF alpha, so 0 is never a valid result).
+JNIEXPORT jint JNICALL
+Java_expo_modules_libghostty_GhosttyVt_nativeParseColor(
+    JNIEnv* env, jobject, jstring color) {
+  GhosttyColorRgb rgb{};
+  return parseColor(env, color, &rgb) ? argb(rgb) : 0;
+}
+
 JNIEXPORT void JNICALL
 Java_expo_modules_libghostty_GhosttyVt_nativeScroll(
     JNIEnv*, jobject, jlong handle, jint deltaRows) {
@@ -384,8 +447,15 @@ Java_expo_modules_libghostty_GhosttyVt_nativeSnapshot(
                              GHOSTTY_RENDER_STATE_DATA_CURSOR_VISUAL_STYLE, &cursorStyle);
   }
 
+  GhosttyColorRgb cursorRgb{};
+  int32_t cursorColor = 0;
+  if (ghostty_terminal_get(session->term, GHOSTTY_TERMINAL_DATA_COLOR_CURSOR, &cursorRgb) ==
+      GHOSTTY_SUCCESS) {
+    cursorColor = argb(cursorRgb);
+  }
+
   auto* header = reinterpret_cast<int32_t*>(base);
-  header[0] = 1;
+  header[0] = 2;
   header[1] = static_cast<int32_t>(dirty);
   header[2] = cols;
   header[3] = rows;
@@ -397,6 +467,7 @@ Java_expo_modules_libghostty_GhosttyVt_nativeSnapshot(
   header[9] = cursorVisible ? 1 : 0;
   header[10] = 0;
   header[11] = cursorBlinking ? 1 : 0;
+  header[12] = cursorColor;
 
   if (dirty == GHOSTTY_RENDER_STATE_DIRTY_FALSE) return 0;
 

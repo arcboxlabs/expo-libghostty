@@ -80,6 +80,16 @@ class ExpoLibghosttyView(context: Context, appContext: AppContext) :
   /** Base font size in dp; applied live (the grid reflows in place). */
   fun setFontSize(dp: Float) = terminal.setFontSize(dp)
 
+  /** Apply theme colors; a null record clears back to the defaults. */
+  internal fun setTheme(theme: TerminalThemeRecord?) = terminal.setTheme(
+    foreground = theme?.foreground,
+    background = theme?.background,
+    cursorColor = theme?.cursorColor,
+    selectionBackground = theme?.selectionBackground,
+    selectionForeground = theme?.selectionForeground,
+    palette = theme?.palette?.toTypedArray()
+  )
+
   /** Feed PTY output (terminal.output on the wire) into the grid. */
   fun write(data: ByteArray) = terminal.write(data)
 

@@ -4,6 +4,8 @@ import android.util.Base64
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.records.Field
+import expo.modules.kotlin.records.Record
 
 class ExpoLibghosttyModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -15,6 +17,11 @@ class ExpoLibghosttyModule : Module() {
       // Base font size in dp (default 14); applied live, the grid reflows.
       Prop("fontSize") { view: ExpoLibghosttyView, size: Float ->
         view.setFontSize(size)
+      }
+
+      // Theme colors (ghostty config syntax); null clears to the defaults.
+      Prop("theme") { view: ExpoLibghosttyView, theme: TerminalThemeRecord? ->
+        view.setTheme(theme)
       }
 
       // PTY output bytes (base64) → terminal grid.
@@ -46,3 +53,14 @@ class ExpoLibghosttyModule : Module() {
 
 internal class InvalidBase64Exception(cause: Throwable) :
   CodedException("expected base64-encoded terminal output", cause)
+
+internal class TerminalThemeRecord : Record {
+  @Field val background: String? = null
+  @Field val foreground: String? = null
+  @Field val cursorColor: String? = null
+  @Field val selectionBackground: String? = null
+  @Field val selectionForeground: String? = null
+
+  /** Palette overrides by index (0-255) on top of ghostty's default palette. */
+  @Field val palette: List<String?>? = null
+}

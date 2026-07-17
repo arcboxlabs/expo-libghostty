@@ -21,6 +21,27 @@ class ExpoLibghosttyView: ExpoView {
     }
   }
 
+  /// Theme colors, applied through the shared controller's ghostty config —
+  /// on iOS the theme is app-wide (every terminal view of the controller),
+  /// unlike Android's per-view application. Colors accept ghostty config
+  /// syntax; nil clears back to the defaults.
+  func applyTheme(_ theme: TerminalThemeRecord?) {
+    var config = TerminalConfiguration()
+    if let theme {
+      if let value = theme.background { config = config.background(value) }
+      if let value = theme.foreground { config = config.foreground(value) }
+      if let value = theme.cursorColor { config = config.cursorColor(value) }
+      if let value = theme.selectionBackground { config = config.selectionBackground(value) }
+      if let value = theme.selectionForeground { config = config.selectionForeground(value) }
+      if let palette = theme.palette {
+        for (index, color) in palette.enumerated() where index < 256 {
+          if let color { config = config.palette(index, color: color) }
+        }
+      }
+    }
+    _ = TerminalController.shared.setTheme(TerminalTheme(light: config, dark: config))
+  }
+
   let onInput = EventDispatcher()
   let onResize = EventDispatcher()
 
