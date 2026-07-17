@@ -40,7 +40,7 @@ allow it in `pnpm-workspace.yaml`:
 
 ```yaml
 allowBuilds:
-  - expo-libghostty
+  expo-libghostty: true
 ```
 
 ## Usage
@@ -123,6 +123,42 @@ commit (Zig 0.15.2 + NDK r27); `vendor-manifest.json` pins the tarball
 checksum. A thin JNI shim (`android/src/main/cpp/ghostty_jni.cpp`) exposes
 the terminal + render-state loop to Kotlin, which paints the grid with
 Canvas/Skia (`GhosttyTerminalView.kt`).
+
+## Troubleshooting
+
+**`pod install` fails on a missing `GhosttyKit.xcframework`, or the Android
+build can't find `libghostty-vt.a`.** The `postinstall` script that fetches
+them didn't run — pnpm blocks dependency build scripts unless
+`expo-libghostty` is in `allowBuilds:` (see Install), and `--ignore-scripts`
+skips it under any package manager. Fix the config and reinstall, or run
+`node node_modules/expo-libghostty/scripts/download-xcframework.mjs` and
+`…/download-android-libs.mjs` by hand.
+
+**Install fails with `download failed: HTTP …` or `checksum mismatch`.**
+The binaries come from GitHub release assets, so the install machine needs
+access to `github.com` (and `objects.githubusercontent.com`). A checksum
+mismatch means the download was corrupted or rewritten in transit
+(intercepting proxy) — the script fails loudly rather than installing an
+unverified binary. Both scripts skip the download when the files are already
+present, so air-gapped setups can pre-seed `ios/vendor/Frameworks/` and
+`android/vendor/{arm64-v8a,x86_64}/`.
+
+**Android crashes with `UnsatisfiedLinkError`.** Only `arm64-v8a` and
+`x86_64` ship (see Platforms); 32-bit ABIs are not supported.
+
+**The terminal stays black in release builds (< 0.8.1).** `write()` issued
+from a mount effect used to race native view registration and was silently
+dropped. Fixed in 0.8.1, where imperative calls queue until the view reports
+its first grid size — upgrade.
+
+**iOS: the grid resets when `fontSize` changes after mount.** A font-size
+change rebuilds the terminal surface on iOS; set it before mounting. Android
+applies it live (the grid reflows in place).
+
+**Contributing: the example iOS build dies with `Could not resolve package
+dependencies`.** Expo SDK 57's `expo-modules-jsi` is a
+`swift-tools-version: 6.2` package — building the example needs the
+Xcode 26 toolchain (CI uses `macos-26`).
 
 ## License
 
