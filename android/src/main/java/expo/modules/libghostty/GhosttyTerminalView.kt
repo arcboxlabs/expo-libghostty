@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.provider.Settings
 import android.text.InputType
 import android.view.Choreographer
 import android.view.GestureDetector
@@ -45,6 +46,14 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   private val italicPaint = newTextPaint(Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC))
   private val boldItalicPaint =
     newTextPaint(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD_ITALIC))
+
+  // Nerd Font private-use glyphs (powerline, devicons, …) are absent from the
+  // system fallback chain; route those cells to the bundled symbols-only font.
+  private val symbolsPaint: Paint? = try {
+    newTextPaint(Typeface.createFromAsset(context.assets, SYMBOLS_FONT_ASSET))
+  } catch (e: RuntimeException) {
+    null
+  }
   private val fillPaint = Paint()
   private val cursorPaint = Paint()
   private val cellWidth = textPaint.measureText("M")
@@ -73,6 +82,20 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   private var cursorY = -1
   private var cursorStyle = CURSOR_STYLE_BLOCK
   private var cursorVisible = false
+  private var cursorBlinks = false
+
+  // The cursor is an onDraw overlay, so blinking only re-blits the cached
+  // bitmap; the grid is untouched.
+  private var blinkPhaseOn = true
+  private var blinkScheduled = false
+  private val blinkRunnable = object : Runnable {
+    override fun run() {
+      if (!blinkScheduled) return
+      blinkPhaseOn = !blinkPhaseOn
+      invalidate()
+      postDelayed(this, BLINK_INTERVAL_MS)
+    }
+  }
 
   private var framePending = false
   private val frameCallback = Choreographer.FrameCallback {
@@ -131,6 +154,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     if (response != null && response.isNotEmpty() && !finished) {
       onInputBytes?.invoke(response)
     }
+    holdBlinkSolid()
     scheduleFrame()
   }
 
@@ -144,6 +168,8 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
       Choreographer.getInstance().removeFrameCallback(frameCallback)
       framePending = false
     }
+    blinkScheduled = false
+    removeCallbacks(blinkRunnable)
     if (handle != 0L) {
       GhosttyVt.nativeFree(handle)
       handle = 0
@@ -151,7 +177,10 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
   }
 
   private fun sendBytes(bytes: ByteArray) {
-    if (!finished && bytes.isNotEmpty()) onInputBytes?.invoke(bytes)
+    if (!finished && bytes.isNotEmpty()) {
+      holdBlinkSolid()
+      onInputBytes?.invoke(bytes)
+    }
   }
 
   private fun sendText(text: CharSequence) {
@@ -222,11 +251,63 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     cursorStyle = buf.int
     cursorVisible = buf.int != 0
     buf.int // row count (== rowCount)
-    buf.int // reserved
+    cursorBlinks = buf.int != 0
+    syncBlinkTimer()
 
     if (dirtyKind == DIRTY_FULL) canvas.drawColor(defaultBg)
     repeat(rowCount) { drawRowRecord(buf, canvas, snapCols) }
     invalidate()
+  }
+
+  // ── Cursor blink ──
+
+  private fun wantsBlink(): Boolean {
+    return cursorBlinks && cursorVisible && isAttachedToWindow && hasWindowFocus() &&
+      Settings.Global.getFloat(
+        context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+      ) != 0f
+  }
+
+  private fun syncBlinkTimer() {
+    val wants = wantsBlink()
+    if (wants && !blinkScheduled) {
+      blinkScheduled = true
+      postDelayed(blinkRunnable, BLINK_INTERVAL_MS)
+    } else if (!wants && blinkScheduled) {
+      blinkScheduled = false
+      removeCallbacks(blinkRunnable)
+      if (!blinkPhaseOn) {
+        blinkPhaseOn = true
+        invalidate()
+      }
+    }
+  }
+
+  /** Show a solid cursor and restart the blink interval (any input/output). */
+  private fun holdBlinkSolid() {
+    if (!blinkPhaseOn) {
+      blinkPhaseOn = true
+      invalidate()
+    }
+    if (blinkScheduled) {
+      removeCallbacks(blinkRunnable)
+      postDelayed(blinkRunnable, BLINK_INTERVAL_MS)
+    }
+  }
+
+  override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+    super.onWindowFocusChanged(hasWindowFocus)
+    syncBlinkTimer()
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    syncBlinkTimer()
+  }
+
+  override fun onDetachedFromWindow() {
+    super.onDetachedFromWindow()
+    syncBlinkTimer()
   }
 
   private fun drawRowRecord(buf: ByteBuffer, canvas: Canvas, snapCols: Int) {
@@ -289,7 +370,11 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
       val flags = cellFlags[col]
       val len = cellTextLen[col]
       if (len == 0 || flags and FLAG_SPACER != 0 || flags and FLAG_INVISIBLE != 0) continue
+      val codepoint = Character.codePointAt(rowChars, cellTextOff[col])
       val paint = when {
+        symbolsPaint != null &&
+          (codepoint in PUA_BMP_FIRST..PUA_BMP_LAST || codepoint >= PUA_SUPPLEMENTARY_FIRST) ->
+          symbolsPaint
         flags and FLAG_BOLD != 0 && flags and FLAG_ITALIC != 0 -> boldItalicPaint
         flags and FLAG_BOLD != 0 -> boldPaint
         flags and FLAG_ITALIC != 0 -> italicPaint
@@ -319,6 +404,7 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
 
   private fun drawCursor(canvas: Canvas) {
     if (!cursorVisible || cursorX < 0 || cursorY < 0) return
+    if (cursorBlinks && blinkScheduled && !blinkPhaseOn) return
     val x = cursorX * cellWidth
     val top = (cursorY * cellHeight).toFloat()
     val bottom = top + cellHeight
@@ -436,6 +522,14 @@ internal class GhosttyTerminalView(context: Context) : View(context) {
     const val INITIAL_COLS = 80
     const val INITIAL_ROWS = 24
     const val MAX_SCROLLBACK = 10_000L
+    const val BLINK_INTERVAL_MS = 600L
+    const val SYMBOLS_FONT_ASSET = "SymbolsNerdFontMono-Regular.ttf"
+
+    // Nerd Font glyph ranges: BMP private-use area plus the supplementary
+    // private-use planes (material icons live at U+F0000+ since v3).
+    const val PUA_BMP_FIRST = 0xE000
+    const val PUA_BMP_LAST = 0xF8FF
+    const val PUA_SUPPLEMENTARY_FIRST = 0xF0000
 
     const val HEADER_BYTES = 48
     const val ROW_HEADER_BYTES = 16

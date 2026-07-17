@@ -20,6 +20,9 @@ env:
   # ghostty's requireZig hard-pins the minor version.
   ZIG_VERSION: 0.15.2
   NDK_VERSION: 27.1.12297006
+  # Symbols-only Nerd Font bundled as an AAR asset for PUA glyph cells.
+  NERD_FONTS_VERSION: v3.4.0
+  NERD_FONTS_SHA256: 8e617904b980fe3648a4b116808788fe50c99d2d495376cb7c0badbd8a564c47
 
 jobs:
   build:
@@ -54,18 +57,27 @@ jobs:
           zig build -Demit-lib-vt -Dtarget=x86_64-linux-android -Dsimd=false \
             -Doptimize=ReleaseFast --prefix out-x86_64
 
+      - name: Fetch Nerd Font symbols
+        run: |
+          curl -sLo nerd-symbols.zip \
+            "https://github.com/ryanoasis/nerd-fonts/releases/download/$NERD_FONTS_VERSION/NerdFontsSymbolsOnly.zip"
+          echo "$NERD_FONTS_SHA256  nerd-symbols.zip" | shasum -a 256 -c
+          unzip -o -q nerd-symbols.zip -d nerd-symbols
+
       - name: Assemble tarball
         id: pack
         working-directory: ghostty
         run: |
           short=$(git rev-parse --short=12 HEAD)
           stage=$(mktemp -d)
-          mkdir -p "$stage/arm64-v8a" "$stage/x86_64"
+          mkdir -p "$stage/arm64-v8a" "$stage/x86_64" "$stage/fonts"
           cp out-arm64-v8a/lib/libghostty-vt.a "$stage/arm64-v8a/"
           cp out-x86_64/lib/libghostty-vt.a "$stage/x86_64/"
           cp -R out-arm64-v8a/include "$stage/include"
+          cp ../nerd-symbols/SymbolsNerdFontMono-Regular.ttf "$stage/fonts/"
+          cp ../nerd-symbols/LICENSE "$stage/fonts/NERD-FONTS-LICENSE"
           tarball="libghostty-vt-android-$short.tar.gz"
-          tar -czf "$tarball" -C "$stage" arm64-v8a x86_64 include
+          tar -czf "$tarball" -C "$stage" arm64-v8a x86_64 include fonts
           echo "tag=storage.libghostty-vt.$short" >> "$GITHUB_OUTPUT"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -79,7 +91,7 @@ jobs:
           gh release create "${{ steps.pack.outputs.tag }}" \
             --repo "$GITHUB_REPOSITORY" \
             --title "libghostty-vt android (${{ inputs.ghostty_commit }})" \
-            --notes "libghostty-vt.a for arm64-v8a + x86_64, ghostty commit ${{ steps.pack.outputs.commit }}, Zig $ZIG_VERSION, NDK $NDK_VERSION, -Dsimd=false" \
+            --notes "libghostty-vt.a for arm64-v8a + x86_64, ghostty commit ${{ steps.pack.outputs.commit }}, Zig $ZIG_VERSION, NDK $NDK_VERSION, -Dsimd=false; Symbols Nerd Font Mono $NERD_FONTS_VERSION" \
             "${{ steps.pack.outputs.tarball }}" || \
           gh release upload "${{ steps.pack.outputs.tag }}" \
             --repo "$GITHUB_REPOSITORY" --clobber \

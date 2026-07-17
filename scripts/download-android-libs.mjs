@@ -5,6 +5,7 @@
 //
 // The tarball is produced by CI (see .github/workflows) and contains:
 //   include/ghostty/**  arm64-v8a/libghostty-vt.a  x86_64/libghostty-vt.a
+//   fonts/SymbolsNerdFontMono-Regular.ttf (AAR asset for PUA glyph cells)
 //
 // When vendor-manifest.json has no `libghostty-vt` entry yet (pre-release
 // checkouts), this script is a no-op so installs don't fail.

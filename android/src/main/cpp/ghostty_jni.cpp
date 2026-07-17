@@ -15,7 +15,7 @@
 //     [4] default bg (ARGB)    [5] default fg (ARGB)
 //     [6] cursor x or -1       [7] cursor y or -1
 //     [8] cursor style         [9] cursor visible (0/1)
-//     [10] row record count    [11] reserved
+//     [10] row record count    [11] cursor blinking (0/1)
 //   row record:
 //     i32 rowIndex, i32 selStartX or -1, i32 selEndX or -1, i32 textUnits
 //     cells[cols] x 16 bytes:
@@ -219,6 +219,11 @@ Java_expo_modules_libghostty_GhosttyVt_nativeCreate(
   ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg);
   ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg);
 
+  // libghostty's built-in default is a non-blinking cursor; blink by default
+  // like the terminal apps users come from. DECSCUSR still overrides.
+  const bool blinkDefault = true;
+  ghostty_terminal_set(session->term, GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK, &blinkDefault);
+
   return static_cast<jlong>(reinterpret_cast<intptr_t>(session));
 }
 
@@ -298,9 +303,12 @@ Java_expo_modules_libghostty_GhosttyVt_nativeSnapshot(
   ghostty_render_state_colors_get(session->renderState, &colors);
 
   bool cursorVisible = false;
+  bool cursorBlinking = false;
   bool cursorInViewport = false;
   ghostty_render_state_get(session->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE,
                            &cursorVisible);
+  ghostty_render_state_get(session->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING,
+                           &cursorBlinking);
   ghostty_render_state_get(session->renderState,
                            GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE,
                            &cursorInViewport);
@@ -329,7 +337,7 @@ Java_expo_modules_libghostty_GhosttyVt_nativeSnapshot(
   header[8] = static_cast<int32_t>(cursorStyle);
   header[9] = cursorVisible ? 1 : 0;
   header[10] = 0;
-  header[11] = 0;
+  header[11] = cursorBlinking ? 1 : 0;
 
   if (dirty == GHOSTTY_RENDER_STATE_DIRTY_FALSE) return 0;
 

@@ -10,6 +10,18 @@
 
 ### 💡 Others
 
+## 0.4.0 — 2026-07-17
+
+### 🎉 New features
+
+- Android: Nerd Font private-use glyphs (powerline, devicons, material, …)
+  now render via a bundled Symbols Nerd Font Mono instead of tofu. The font
+  ships in the vendor tarball and is exposed as an AAR asset; cells whose
+  first codepoint is in U+E000–F8FF or U+F0000+ draw with it.
+- Android: cursor blink. Follows the terminal's DECSCUSR-driven blink state
+  (blinking by default), holds solid on input/output, pauses when the window
+  is unfocused, and respects the system animations-off setting.
+
 ## 0.3.0 — 2026-07-16
 
 ### 🎉 New features
